@@ -32,17 +32,33 @@ async function generateAIResponse(modelName, prompt, schema = null, search = fal
     console.log(`[AI Request] Model: ${modelName}, Search: ${search}`);
     const model = genAI.getGenerativeModel({
         model: modelName,
-        tools: search ? [{ googleSearch: {} }] : undefined
+        tools: search ? [{ googleSearch: {} }] : undefined,
+        safetySettings: [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
     });
 
     const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: schema ? { responseMimeType: "application/json" } : undefined
+        generationConfig: schema ? {
+            responseMimeType: "application/json",
+            temperature: 0.2 // Lower temperature for more consistent JSON
+        } : {
+            temperature: 0.7
+        }
     });
 
     const response = result.response;
     const text = response.text();
     console.log(`[AI Response] Length: ${text.length} chars`);
+
+    // Log a snippet for debugging parse errors
+    if (schema) {
+        console.log(`[AI JSON Snippet] ${text.substring(0, 100)}...`);
+    }
 
     let sources = [];
     if (search) {
@@ -60,7 +76,14 @@ app.post('/api/extract-syllabus', async (req, res) => {
     console.log("-> /api/extract-syllabus");
     try {
         const { text, lang } = req.body;
-        const prompt = `Extract TNPSC Group 1 syllabus from this text into structured JSON. Format: [{ "subject": "History", "topics": [{ "name": "Topic", "subtopics": ["Sub"] }] }]. Language: ${lang}. Content: ${text.substring(0, 10000)}`;
+        // Increase context window for syllabus
+        const contextText = text.length > 50000 ? text.substring(0, 50000) : text;
+        const prompt = `Extract TNPSC Group 1 syllabus from this text into structured JSON. 
+        Format: [{ "subject": "History", "topics": [{ "name": "Topic", "subtopics": ["Sub"] }] }]. 
+        Language: ${lang}. 
+        Content: ${contextText}`;
+
+        // Use 2.5-flash for speed and reliability
         const { text: responseText } = await generateAIResponse("gemini-2.5-flash", prompt, true);
         res.json({ success: true, data: cleanAndParseJSON(responseText) });
     } catch (error) {
@@ -74,25 +97,20 @@ app.post('/api/generate-schedule', async (req, res) => {
     try {
         const { config, syllabus, questionPapersContent, lang, progressData } = req.body;
 
-        // Calculate days until exam
         const today = new Date();
         const examDate = new Date(config.examDate);
         const daysUntilExam = Math.ceil((examDate - today) / (1000 * 60 * 60 * 24));
 
-        // Determine start date for this generation
         const startDate = progressData?.lastGeneratedDate
-            ? new Date(new Date(progressData.lastGeneratedDate).getTime() + 86400000) // Next day after last
+            ? new Date(new Date(progressData.lastGeneratedDate).getTime() + 86400000)
             : today;
 
-        // Generate 30 days at a time
         const periodDays = 30;
         const endDate = new Date(startDate.getTime() + (periodDays * 86400000));
 
-        // Extract completed and missed topics
         const completedTopics = progressData?.completedTopics || [];
         const missedTopics = progressData?.missedTopics || [];
 
-        // Build context about progress
         let progressContext = "";
         if (completedTopics.length > 0) {
             progressContext += `\nCompleted topics (don't repeat): ${completedTopics.join(', ')}`;
@@ -101,21 +119,20 @@ app.post('/api/generate-schedule', async (req, res) => {
             progressContext += `\nMISSED topics (MUST include with priority): ${missedTopics.join(', ')}`;
         }
 
-        // Determine intensity based on time remaining
         const isNearExam = daysUntilExam < 60;
         const intensityNote = isNearExam
             ? "EXAM IS NEAR: Increase revision days, add more mock tests, focus on high-yield topics."
             : "Regular pace: Balance new topics with revision.";
 
-        const prompt = `Generate a 30-day TNPSC study plan.
-
+        const prompt = `As a TNPSC Expert, generate a 30-day Study Plan.
+        
 START DATE: ${startDate.toISOString().split('T')[0]}
 END DATE: ${endDate.toISOString().split('T')[0]}
 EXAM DATE: ${config.examDate} (${daysUntilExam} days remaining)
 STUDY HOURS/DAY: ${config.studyHoursPerDay}
 TECHNIQUES: ${config.preferredMethods?.join(', ')}
 
-SYLLABUS: ${JSON.stringify(syllabus).substring(0, 2000)}
+SYLLABUS: ${JSON.stringify(syllabus).substring(0, 10000)}
 ${progressContext}
 
 ${intensityNote}
@@ -126,18 +143,16 @@ RULES:
 3. Saturdays: MOCK_TEST
 4. Sundays: REVISION
 5. Don't repeat completed topics
-6. Each task should be concise: "Subject - Topic (Xhrs)"
+6. Return ONLY valid JSON array.
 
-FORMAT (JSON array):
+FORMAT:
 {
-  "id": 1,
+  "id": "day-1",
   "date": "YYYY-MM-DD",
   "type": "STUDY" | "REVISION" | "MOCK_TEST",
   "tasks": ["Task 1", "Task 2"],
   "isCompleted": false
-}
-
-Return ONLY valid JSON array.`;
+}`;
 
         const { text: responseText } = await generateAIResponse("gemini-2.5-flash", prompt, true);
         res.json({ success: true, data: cleanAndParseJSON(responseText) });
@@ -212,6 +227,38 @@ app.post('/api/parse-schedule', async (req, res) => {
         console.error("[ERROR]", error);
         res.status(500).json({ success: false, error: error.message });
     }
+});
+
+
+// State Persistence
+const fs = require('fs');
+const path = require('path');
+const STATE_DIR = path.join(__dirname, 'data', 'states');
+
+if (!fs.existsSync(STATE_DIR)) {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+}
+
+app.get('/api/user/state', (req, res) => {
+    const email = req.query.email;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+
+    const filePath = path.join(STATE_DIR, `${Buffer.from(email).toString('base64')}.json`);
+    if (fs.existsSync(filePath)) {
+        const data = fs.readFileSync(filePath, 'utf8');
+        res.json({ success: true, data: JSON.parse(data) });
+    } else {
+        res.json({ success: true, data: null });
+    }
+});
+
+app.post('/api/user/state', (req, res) => {
+    const { email, state } = req.body;
+    if (!email || !state) return res.status(400).json({ error: 'Email and state required' });
+
+    const filePath = path.join(STATE_DIR, `${Buffer.from(email).toString('base64')}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(state), 'utf8');
+    res.json({ success: true });
 });
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
