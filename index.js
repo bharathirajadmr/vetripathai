@@ -166,10 +166,25 @@ app.get('/api/current-affairs', async (req, res) => {
     console.log("-> /api/current-affairs");
     try {
         const { lang } = req.query;
-        const prompt = `Search for latest weekly TNPSC relevant current affairs. Return JSON array with title, summary, category (STATE, NATIONAL, ECONOMY, SCIENCE, INTERNATIONAL), date. Language: ${lang}`;
+        const prompt = `Find 5-6 latest TNPSC current affairs from the past 7 days.
+        Categories: STATE (Tamil Nadu), NATIONAL (India), ECONOMY, SCIENCE, INTERNATIONAL.
+        Return EXCLUSIVELY a JSON array of objects with keys: title, summary, category, date.
+        Language: ${lang === 'ta' ? 'Tamil' : 'English'}.
+        Topics should be relevant to competitive exams like TNPSC.`;
+
         const { text: responseText, sources } = await generateAIResponse("gemini-2.5-flash", prompt, true, true);
         const news = cleanAndParseJSON(responseText);
-        const data = news.map((n, idx) => ({ ...n, id: `ca-${idx}`, sources: sources.slice(0, 2) }));
+
+        // Ensure data consistency
+        const data = news.map((n, idx) => ({
+            id: `ca-${idx}`,
+            title: n.title || n.Name || "Current Event",
+            summary: n.summary || n.Description || n.content || "",
+            category: (n.category || "GENERAL").toUpperCase(),
+            date: n.date || new Date().toISOString().split('T')[0],
+            sources: sources.slice(0, 2)
+        }));
+
         res.json({ success: true, data });
     } catch (error) {
         console.error("[ERROR]", error);
@@ -259,6 +274,17 @@ app.post('/api/user/state', (req, res) => {
     const filePath = path.join(STATE_DIR, `${Buffer.from(email).toString('base64')}.json`);
     fs.writeFileSync(filePath, JSON.stringify(state), 'utf8');
     res.json({ success: true });
+});
+
+app.get('/api/syllabus/:id', (req, res) => {
+    const { id } = req.params;
+    const filePath = path.join(__dirname, 'data', 'syllabuses', `${id}.txt`);
+    if (fs.existsSync(filePath)) {
+        const data = fs.readFileSync(filePath, 'utf8');
+        res.json({ success: true, data });
+    } else {
+        res.status(404).json({ success: false, error: 'Syllabus not found' });
+    }
 });
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
