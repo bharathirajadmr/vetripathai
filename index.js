@@ -43,11 +43,11 @@ async function generateAIResponse(modelName, prompt, schema = null, search = fal
 
     const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: schema ? {
+        generationConfig: (schema && !search) ? {
             responseMimeType: "application/json",
-            temperature: 0.2 // Lower temperature for more consistent JSON
+            temperature: 0.2
         } : {
-            temperature: 0.7
+            temperature: search ? 0.4 : 0.7
         }
     });
 
@@ -110,6 +110,7 @@ app.post('/api/generate-schedule', async (req, res) => {
 
         const completedTopics = progressData?.completedTopics || [];
         const missedTopics = progressData?.missedTopics || [];
+        const hardTopics = progressData?.hardTopics || [];
 
         let progressContext = "";
         if (completedTopics.length > 0) {
@@ -117,6 +118,9 @@ app.post('/api/generate-schedule', async (req, res) => {
         }
         if (missedTopics.length > 0) {
             progressContext += `\nMISSED topics (MUST include with priority): ${missedTopics.join(', ')}`;
+        }
+        if (hardTopics.length > 0) {
+            progressContext += `\nHARD topics (Marked by user as difficult, include in Spaced Repetition/Revision slots): ${hardTopics.join(', ')}`;
         }
 
         const isNearExam = daysUntilExam < 60;
@@ -138,12 +142,18 @@ ${progressContext}
 ${intensityNote}
 
 RULES:
-1. Generate EXACTLY 30 days starting from ${startDate.toISOString().split('T')[0]}
-2. PRIORITIZE missed topics in first week
-3. Saturdays: MOCK_TEST
-4. Sundays: REVISION
-5. Don't repeat completed topics
-6. Return ONLY valid JSON array.
+1. Generate EXACTLY 30 days starting from ${startDate.toISOString().split('T')[0]}.
+2. If techniques include 'Interleaved Study', EACH daily "tasks" array MUST have exactly 3 items: 
+   - Slot 1: A Core subject topic (Polity/History/Unit 8) - ~2 hrs.
+   - Slot 2: Aptitude & Mental Ability topic (Unit 10) - ~1 hr.
+   - Slot 3: Dynamic subject topic (Current Affairs/Science & Tech) - ~1.5 hrs.
+   Format these 3 tasks as "Slot 1: [Topic]", "Slot 2: [Topic]", "Slot 3: [Topic]".
+3. PRIORITIZE missed topics in first week.
+4. Saturdays: MOCK_TEST.
+5. Sundays: REVISION.
+6. Don't repeat completed topics.
+7. Return ONLY valid JSON array.
+8. If NOT Interleaved, "tasks" can be 3-5 general topics.
 
 FORMAT:
 {
@@ -169,6 +179,7 @@ app.get('/api/current-affairs', async (req, res) => {
         const prompt = `Find 5-6 latest TNPSC current affairs from the past 7 days.
         Categories: STATE (Tamil Nadu), NATIONAL (India), ECONOMY, SCIENCE, INTERNATIONAL.
         Return EXCLUSIVELY a JSON array of objects with keys: title, summary, category, date.
+        DO NOT include any markdown formatting or code blocks, just the raw JSON text.
         Language: ${lang === 'ta' ? 'Tamil' : 'English'}.
         Topics should be relevant to competitive exams like TNPSC.`;
 
@@ -196,7 +207,13 @@ app.post('/api/practice-question', async (req, res) => {
     console.log("-> /api/practice-question");
     try {
         const { topics, questionPapers, lang } = req.body;
-        const prompt = `Generate one TNPSC question and explanation as JSON: {question, explanation}. Topics: ${topics.join(', ')}. Language: ${lang}. Context: ${questionPapers?.substring(0, 5000)}`;
+        const prompt = `As a TNPSC Examiner, generate 5 difficult MCQs based on these topics: ${topics.join(', ')}. 
+        Latest TNPSC trends must be followed.
+        Requirement: Include exactly 5 questions.
+        Specific Requirement: One question MUST be of 'Assertion and Reason' type.
+        Return EXCLUSIVELY a JSON array: [{ "question": "...", "explanation": "..." }].
+        Language: ${lang}. 
+        Context: ${questionPapers?.substring(0, 5000)}`;
         const { text: responseText } = await generateAIResponse("gemini-2.5-flash", prompt, true);
         res.json({ success: true, data: cleanAndParseJSON(responseText) });
     } catch (error) {
@@ -284,6 +301,31 @@ app.get('/api/syllabus/:id', (req, res) => {
         res.json({ success: true, data });
     } else {
         res.status(404).json({ success: false, error: 'Syllabus not found' });
+    }
+});
+
+app.post('/api/daily-summary', async (req, res) => {
+    try {
+        const { tasks, language } = req.body;
+        const prompt = `As a friendly AI mentor, provide a 30-45 second motivational summary of today's study plan for a student preparing for TNPSC.
+        
+        TASKS FOR TODAY:
+        ${tasks.join('\n- ')}
+        
+        LANGUAGE: ${language === 'ta' ? 'Tamil' : 'English'}
+        
+        INSTRUCTIONS:
+        - Keep it encouraging and high-energy.
+        - Don't just list the topics; explain *why* they are important or give a quick tip.
+        - Sound natural, like a podcast or mentor briefing.
+        - Max 100 words.
+        - Return ONLY the plain text summary without any markdown or formatting.`;
+
+        const summary = await generateAIResponse(prompt);
+        res.json({ success: true, summary });
+    } catch (error) {
+        console.error('Summary error:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
