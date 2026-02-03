@@ -84,7 +84,7 @@ app.post('/api/extract-syllabus', async (req, res) => {
         Content: ${contextText}`;
 
         // Use 2.5-flash for speed and reliability
-        const { text: responseText } = await generateAIResponse("gemini-2.5-flash", prompt, true);
+        const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true);
         res.json({ success: true, data: cleanAndParseJSON(responseText) });
     } catch (error) {
         console.error("[ERROR]", error);
@@ -101,8 +101,9 @@ app.post('/api/generate-schedule', async (req, res) => {
         const examDate = new Date(config.examDate);
         const daysUntilExam = Math.ceil((examDate - today) / (1000 * 60 * 60 * 24));
 
-        const startDate = progressData?.lastGeneratedDate
-            ? new Date(new Date(progressData.lastGeneratedDate).getTime() + 86400000)
+        const lastGeneratedDate = progressData?.lastGeneratedDate;
+        const startDate = (lastGeneratedDate && !isNaN(new Date(lastGeneratedDate).getTime()))
+            ? new Date(new Date(lastGeneratedDate).getTime() + 86400000)
             : today;
 
         const periodDays = 30;
@@ -164,7 +165,7 @@ FORMAT:
   "isCompleted": false
 }`;
 
-        const { text: responseText } = await generateAIResponse("gemini-2.5-flash", prompt, true);
+        const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true);
         res.json({ success: true, data: cleanAndParseJSON(responseText) });
     } catch (error) {
         console.error("[ERROR]", error);
@@ -183,7 +184,7 @@ app.get('/api/current-affairs', async (req, res) => {
         Language: ${lang === 'ta' ? 'Tamil' : 'English'}.
         Topics should be relevant to competitive exams like TNPSC.`;
 
-        const { text: responseText, sources } = await generateAIResponse("gemini-2.5-flash", prompt, true, true);
+        const { text: responseText, sources } = await generateAIResponse("gemini-2.0-flash", prompt, true, true);
         const news = cleanAndParseJSON(responseText);
 
         // Ensure data consistency
@@ -214,7 +215,7 @@ app.post('/api/practice-question', async (req, res) => {
         Return EXCLUSIVELY a JSON array: [{ "question": "...", "explanation": "..." }].
         Language: ${lang}. 
         Context: ${questionPapers?.substring(0, 5000)}`;
-        const { text: responseText } = await generateAIResponse("gemini-2.5-flash", prompt, true);
+        const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true);
         res.json({ success: true, data: cleanAndParseJSON(responseText) });
     } catch (error) {
         console.error("[ERROR]", error);
@@ -227,7 +228,7 @@ app.get('/api/motivation', async (req, res) => {
     try {
         const { lang } = req.query;
         const prompt = `Short motivational quote for student. Language: ${lang}. Just text.`;
-        const { text: responseText } = await generateAIResponse("gemini-2.5-flash", prompt);
+        const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt);
         res.json({ success: true, data: responseText.trim() });
     } catch (error) {
         console.error("[ERROR]", error);
@@ -240,7 +241,7 @@ app.post('/api/mock-test', async (req, res) => {
     try {
         const { completedTopics, oldPapers, lang } = req.body;
         const prompt = `As a TNPSC Examiner, generate a Mock Test (10 MCQs) in ${lang === 'ta' ? 'Tamil' : 'English'}. Topics: ${completedTopics.join(', ')}. Context: ${oldPapers?.substring(0, 5000)}. Return JSON array of objects with {question, options, correctAnswer, explanation}.`;
-        const { text: responseText } = await generateAIResponse("gemini-2.5-flash", prompt, true);
+        const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true);
         res.json({ success: true, data: cleanAndParseJSON(responseText) });
     } catch (error) {
         console.error("[ERROR]", error);
@@ -253,7 +254,7 @@ app.post('/api/parse-schedule', async (req, res) => {
     try {
         const { text, examDate } = req.body;
         const prompt = `Transform this manual study schedule into structured JSON StudyDay objects. Exam: ${examDate}. Content: ${text}. Format: JSON array of {id, date, type, tasks, isCompleted}.`;
-        const { text: responseText } = await generateAIResponse("gemini-2.5-flash", prompt, true);
+        const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true);
         res.json({ success: true, data: cleanAndParseJSON(responseText) });
     } catch (error) {
         console.error("[ERROR]", error);
@@ -321,7 +322,7 @@ app.post('/api/daily-summary', async (req, res) => {
         - Max 100 words.
         - Return ONLY the plain text summary without any markdown or formatting.`;
 
-        const summary = await generateAIResponse(prompt);
+        const { text: summary } = await generateAIResponse("gemini-2.0-flash", prompt);
         res.json({ success: true, summary });
     } catch (error) {
         console.error('Summary error:', error);
