@@ -2,6 +2,7 @@ import React from 'react';
 import { TRANSLATIONS, RANKS } from '../constants';
 import { fetchDailySummary } from '../services/gemini';
 import { Language, AppState } from '../types';
+import { API_URL } from '../constants';
 import { CompletionChart, CircularChart } from './Charts';
 import PracticeQuestion from './PracticeQuestion';
 
@@ -16,6 +17,21 @@ const Dashboard: React.FC<DashboardProps> = ({ lang, state, onRegenerateSchedule
     const t = TRANSLATIONS[lang];
     const [summaryLoading, setSummaryLoading] = React.useState(false);
     const [showRankJourney, setShowRankJourney] = React.useState(false);
+    const [leaderboard, setLeaderboard] = React.useState<any[]>([]);
+
+    React.useEffect(() => {
+        const fetchLeaderboard = async () => {
+            try {
+                const res = await fetch(`${API_URL}/api/leaderboard`);
+                const data = await res.json();
+                if (data.success) setLeaderboard(data.data);
+            } catch (e) { console.error('Leaderboard error:', e); }
+        };
+        fetchLeaderboard();
+        // Refresh every 5 minutes
+        const interval = setInterval(fetchLeaderboard, 5 * 60 * 1000);
+        return () => clearInterval(interval);
+    }, []);
 
     const handlePlaySummary = async () => {
         if (!state.schedule) return;
@@ -415,7 +431,39 @@ const Dashboard: React.FC<DashboardProps> = ({ lang, state, onRegenerateSchedule
             )}
 
             <div className="grid lg:grid-cols-2 gap-8">
-                <CompletionChart data={subjectProgress} type="bar" title={t.subjectWise} />
+                <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800">
+                    <h3 className="text-xl font-black text-gray-800 dark:text-gray-200 mb-6 flex items-center justify-between">
+                        <div className="flex items-center">
+                            <span className="w-1 h-6 bg-indigo-500 rounded-full mr-3" />
+                            {lang === 'en' ? 'Weekly Top Officers' : 'வாராந்திர சிறந்த அதிகாரிகள்'}
+                        </div>
+                        <span className="text-[10px] bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full uppercase">Live Stats</span>
+                    </h3>
+                    <div className="space-y-4">
+                        {leaderboard.length > 0 ? (
+                            leaderboard.map((entry, idx) => (
+                                <div key={idx} className={`flex items-center justify-between p-3 rounded-2xl transition-all ${idx === 0 ? 'bg-amber-50 border border-amber-100' : 'hover:bg-gray-50'}`}>
+                                    <div className="flex items-center space-x-4">
+                                        <span className={`w-6 text-xs font-black ${idx === 0 ? 'text-amber-600' : 'text-gray-400'}`}>#{idx + 1}</span>
+                                        <div>
+                                            <p className="text-sm font-black text-gray-900 dark:text-gray-200">{entry.name}</p>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase">{entry.exam}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm font-black text-indigo-600">Level {entry.level}</p>
+                                        <p className="text-[8px] font-bold text-gray-400 uppercase">{entry.xp} XP</p>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="py-10 text-center text-gray-400 font-medium">
+                                Loading candidates...
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800">
                     <h3 className="text-xl font-black text-gray-800 dark:text-gray-200 mb-6 flex items-center">
                         <span className="w-1 h-6 bg-red-500 rounded-full mr-3" />

@@ -16,6 +16,17 @@ interface LayoutProps {
   hasSchedule?: boolean;
 }
 
+const formatExpiryDate = (dateString: string) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const day = date.getDate();
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  return `${day}-${monthNames[date.getMonth()]}-${date.getFullYear()}`;
+};
+
 const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang, setLang, streak, theme = 'light', toggleTheme, hasSchedule = false }) => {
   const t = TRANSLATIONS[lang];
   const { currentUser, logout } = useAuth();
@@ -47,9 +58,51 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
     return `${name.slice(0, 2)}***@${domain}`;
   };
 
+  const [installPrompt, setInstallPrompt] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setInstallPrompt(null);
+    }
+  };
+
+  const [showNudge, setShowNudge] = React.useState(false);
+
+  React.useEffect(() => {
+    // Show nudge if it's after 7 PM and user is on trial/pending
+    const checkNudge = () => {
+      const hour = new Date().getHours();
+      if (hour >= 19 && currentUser?.subscriptionStatus !== 'expired') {
+        setShowNudge(true);
+      }
+    };
+    checkNudge();
+    const interval = setInterval(checkNudge, 30 * 60 * 1000); // Check every 30 mins
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
+  const requestNotifications = () => {
+    if ('Notification' in window) {
+      Notification.requestPermission();
+    }
+    setShowNudge(false);
+  };
+
   return (
-    <div className={`min-h-screen flex flex-col ${theme === 'dark' ? 'dark bg-slate-950 text-gray-100' : 'bg-sky-50/30 text-gray-900'}`}>
-      <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 sticky top-0 z-50 px-4 md:px-8 py-3 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0 shadow-sm transition-colors">
+    <div className={`min-h-screen flex flex-col ${theme === 'dark' ? 'dark bg-[#070b14] text-gray-100' : 'bg-sky-50/30 text-gray-900'}`}>
+      <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b dark:border-slate-800 sticky top-0 z-50 px-4 md:px-8 py-3 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0 shadow-sm transition-colors">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-3 group cursor-pointer" onClick={() => setActiveTab('dashboard')}>
             <img src="/logo.png" alt="Vetri Pathai" className="h-10 md:h-12 w-auto rounded-xl shadow-md transition-all group-hover:scale-110 group-hover:rotate-3" />
@@ -61,7 +114,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
           </div>
         </div>
 
-        <nav className="flex space-x-1 bg-gray-50 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700 overflow-x-auto no-scrollbar max-w-full">
+        <nav className="hidden md:flex space-x-1 bg-gray-50 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700 overflow-x-auto no-scrollbar max-w-full">
           <NavItem id="dashboard" label={t.dashboard} icon="📊" />
           <NavItem id="schedule" label={t.schedule} icon="📅" restricted />
           <NavItem id="syllabus" label={t.syllabus} icon="📖" restricted />
@@ -71,6 +124,16 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
         </nav>
 
         <div className="flex items-center space-x-3">
+          {installPrompt && (
+            <button
+              onClick={handleInstallClick}
+              className="hidden lg:flex items-center space-x-2 px-3 py-1.5 bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-800 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-sky-600 hover:text-white transition-all animate-bounce"
+            >
+              <span>📥</span>
+              <span>Install App</span>
+            </button>
+          )}
+
           <div className="hidden lg:flex flex-col items-end mr-2">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">{currentUser?.fullName}</p>
             <p className="text-[10px] text-sky-600 font-bold">{maskEmail(currentUser?.email)}</p>
@@ -91,8 +154,11 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
             <option value="ta">தமிழ்</option>
           </select>
           <button
-            onClick={() => logout()}
-            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+            onClick={() => {
+              const msg = lang === 'en' ? 'Are you sure you want to logout?' : 'நீங்கள் வெளியேற விரும்புகிறீர்களா?';
+              if (window.confirm(msg)) logout();
+            }}
+            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all text-2xl flex items-center justify-center w-10 h-10"
             title={t.logout}
           >
             🚪
@@ -100,9 +166,47 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
         </div>
       </header >
 
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-gray-100 dark:border-slate-800 z-[60] flex items-center justify-around px-2 py-2 safe-bottom">
+        {[
+          { id: 'dashboard', label: t.dashboard, icon: '📊' },
+          { id: 'schedule', label: t.schedule, icon: '📅', restricted: true },
+          { id: 'currentAffairs', label: 'News', icon: '📰' },
+          { id: 'syllabus', label: 'Book', icon: '📖', restricted: true },
+          { id: 'subscription', label: 'Pro', icon: '💳' },
+        ].map(item => {
+          const isDisabled = item.restricted && !hasSchedule;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => !isDisabled && setActiveTab(item.id)}
+              disabled={isDisabled}
+              className={`flex flex-col items-center space-y-1 py-1 flex-1 transition-all ${isActive ? 'text-sky-600' : isDisabled ? 'opacity-30' : 'text-gray-400'}`}
+            >
+              <span className="text-xl">{item.icon}</span>
+              <span className="text-[10px] font-black uppercase tracking-tighter">{item.label.split(' ')[0]}</span>
+              {isActive && <div className="w-1 h-1 bg-sky-600 rounded-full mt-1" />}
+            </button>
+          );
+        })}
+      </nav>
+
+      {showNudge && (
+        <div className="bg-indigo-600 text-white py-3 px-4 flex justify-between items-center animate-in slide-in-from-top duration-500">
+          <p className="text-xs font-bold">
+            ⚡ {lang === 'en' ? 'Officer, finish your remaining tasks to stay on track!' : 'அதிகாரியே, உங்கள் இலக்குகளை முடிக்க இன்று இன்னும் சில வேலைகள் உள்ளன!'}
+          </p>
+          <div className="flex space-x-3">
+            <button onClick={requestNotifications} className="bg-white text-indigo-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase">Remind Me</button>
+            <button onClick={() => setShowNudge(false)} className="opacity-60 text-xs">✕</button>
+          </div>
+        </div>
+      )}
+
       {currentUser?.subscriptionStatus === 'trial' && (
         <div className="bg-sky-600 text-white py-2 text-center text-xs font-bold tracking-tight">
-          🚀 {t.trialMessage} {lang === 'en' ? 'Expires' : 'முடிகிறது'}: {new Date(currentUser.subscriptionExpiry).toLocaleDateString()}
+          🚀 {t.trialMessage} {lang === 'en' ? 'Expires' : 'முடிகிறது'}: {formatExpiryDate(currentUser.subscriptionExpiry)}
         </div>
       )}
 
@@ -121,7 +225,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
             </span>
             <span className="hidden md:block w-1.5 h-1.5 rounded-full bg-gray-200 dark:bg-slate-800" />
             <span className="flex items-center">
-              Conceptualized by <span className="text-sky-600 dark:text-sky-400 ml-2">Mrs. Aruna</span>
+              Conceptualized by <span className="text-sky-600 dark:text-sky-400 ml-2">Mrs. Aruna Bharathi Raja</span>
             </span>
           </div>
         </div>

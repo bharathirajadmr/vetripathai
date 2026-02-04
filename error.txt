@@ -1,0 +1,3 @@
+curl: (3) bad range specification in URL position 13:
+syllabus\: [{\subject\: \Polity\, \topics\: [{\name\: \Preamble\, \subtopics\: [], \weightage\: \High\, \marksWeight\: 10}]}], \config\: {\examName\: \TNPSC\, \examDate\: \2026-06-01\, \startDate\: \2026-02-05\, \endDate\: \2026-03-05\, \studyHoursPerDay\: 4, \language\: \en\, \preferredMethods\: [\Interleaved
+            ^

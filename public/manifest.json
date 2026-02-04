@@ -6,6 +6,10 @@
     "display": "standalone",
     "background_color": "#0c4a6e",
     "theme_color": "#0284c7",
+    "categories": [
+        "education",
+        "productivity"
+    ],
     "icons": [
         {
             "src": "/logo.png",
@@ -14,5 +18,7 @@
             "purpose": "any maskable"
         }
     ],
-    "orientation": "portrait"
+    "orientation": "portrait",
+    "dir": "ltr",
+    "lang": "en-US"
 }

@@ -3,6 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const fs = require('fs');
+const path = require('path');
+const QUIZ_BANK_PATH = path.join(__dirname, 'data', 'quiz_bank.json');
 
 dotenv.config();
 
@@ -13,6 +16,19 @@ app.use(express.json({ limit: '50mb' })); // Allow larger payloads for PDF text
 // For Render, API key will be in environment variables
 const api_key = process.env.GEMINI_API_KEY || process.env.API_KEY;
 const genAI = new GoogleGenerativeAI(api_key);
+
+const GENERIC_TNPSC_QUIZ = [
+    { "question": "Who is known as the 'Father of Local Self Government' in India?", "options": ["Lord Mayo", "Lord Ripon", "Lord Curzon", "Lord Dalhousie"], "correctAnswer": "B", "explanation": "Lord Ripon is known as the Father of Local Self Government in India." },
+    { "question": "Which article of the Indian Constitution deals with the Right to Equality?", "options": ["Article 14", "Article 17", "Article 21", "Article 44"], "correctAnswer": "A", "explanation": "Article 14 ensures equality before the law." },
+    { "question": "The Shore Temple is located in which city?", "options": ["Kanchipuram", "Thanjavur", "Mahabalipuram", "Madurai"], "correctAnswer": "C", "explanation": "The Shore Temple is an iconic 8th-century structure in Mahabalipuram." },
+    { "question": "Who was the first woman to become the Governor of an Indian state?", "options": ["Sarojini Naidu", "Sucheta Kripalani", "Vijayalakshmi Pandit", "Indira Gandhi"], "correctAnswer": "A", "explanation": "Sarojini Naidu was the Governor of United Provinces (now Uttar Pradesh)." },
+    { "question": "Which planet is known as the Blue Planet?", "options": ["Mars", "Venus", "Earth", "Neptune"], "correctAnswer": "C", "explanation": "Earth is called the Blue Planet due to the presence of water." },
+    { "question": "The Sepoy Mutiny took place in which year?", "options": ["1857", "1757", "1885", "1942"], "correctAnswer": "A", "explanation": "The first war of Indian Independence occurred in 1857." },
+    { "question": "What is the official language of Tamil Nadu?", "options": ["Hindi", "English", "Tamil", "Sanskrit"], "correctAnswer": "C", "explanation": "Tamil is the official language of the state." },
+    { "question": "Who founded the Self-Respect Movement?", "options": ["E.V. Ramasamy (Periyar)", "C.N. Annadurai", "M.G. Ramachandran", "K. Kamaraj"], "correctAnswer": "A", "explanation": "Periyar started the Self-Respect Movement in 1925." },
+    { "question": "Which is the highest peak in Southern India?", "options": ["Anamudi", "Doddabetta", "Kalsubai", "Mahendragiri"], "correctAnswer": "A", "explanation": "Anamudi in Kerala is the highest peak in the Western Ghats and South India." },
+    { "question": "Who composed the song 'Jana Gana Mana'?", "options": ["Bankim Chandra Chatterjee", "Rabindranath Tagore", "Sarojini Naidu", "Subhash Chandra Bose"], "correctAnswer": "B", "explanation": "Rabindranath Tagore wrote the National Anthem of India." }
+];
 
 // Helper to clean and parse JSON from AI response
 function cleanAndParseJSON(text) {
@@ -28,11 +44,17 @@ function cleanAndParseJSON(text) {
 }
 
 // Helper for AI generation with JSON schema Support
-async function generateAIResponse(modelName, prompt, schema = null, search = false) {
-    console.log(`[AI Request] Model: ${modelName}, Search: ${search}`);
+async function generateAIResponse(modelName, prompt, schema = null, search = false, isRetry = false) {
+    // Force gemini-2.0-flash as it's the only one working for this user
+    const activeModel = (modelName === 'RETRY_INTERNAL' || modelName === 'gemini-1.5-flash-latest' || modelName === 'gemini-1.5-flash')
+        ? 'gemini-2.0-flash'
+        : modelName;
+
+    console.log(`[AI Request] Model: ${activeModel}, Search: ${search}, Length: ${prompt.length}${isRetry ? ' (RETRY)' : ''}`);
+
     try {
         const model = genAI.getGenerativeModel({
-            model: modelName,
+            model: activeModel,
             tools: search ? [{ googleSearch: {} }] : undefined,
             safetySettings: [
                 { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
@@ -46,7 +68,7 @@ async function generateAIResponse(modelName, prompt, schema = null, search = fal
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             generationConfig: (schema && !search) ? {
                 responseMimeType: "application/json",
-                temperature: 0.2
+                temperature: 0.1
             } : {
                 temperature: search ? 0.4 : 0.7
             }
@@ -54,12 +76,7 @@ async function generateAIResponse(modelName, prompt, schema = null, search = fal
 
         const response = result.response;
         const text = response.text();
-        console.log(`[AI Response] Length: ${text.length} chars`);
-
-        // Log a snippet for debugging parse errors
-        if (schema) {
-            console.log(`[AI JSON Snippet] ${text.substring(0, 100)}...`);
-        }
+        console.log(`[AI Response] Status: Success, Length: ${text.length} chars`);
 
         let sources = [];
         if (search) {
@@ -71,12 +88,35 @@ async function generateAIResponse(modelName, prompt, schema = null, search = fal
 
         return { text, sources };
     } catch (error) {
-        // Handle Rate Limit (429) fallback
-        if ((error.message.includes('429') || error.message.includes('Resource exhausted')) && modelName === 'gemini-2.0-flash') {
-            console.warn(`[Fallback] 429 Rate Limit hit for 2.0-flash. Retrying with 1.5-flash...`);
-            return generateAIResponse('gemini-1.5-flash', prompt, schema, search);
+        const isRateLimit = error.message.includes('429') || error.message.includes('Resource exhausted');
+        console.error(`[AI Error] ${activeModel} failed${isRetry ? ` (Retry #${isRetry})` : ''}:`, error.message);
+
+        // If it's a Rate Limit (429), we need to be very patient
+        if (isRateLimit) {
+            const retryCount = typeof isRetry === 'number' ? isRetry : (isRetry ? 1 : 0);
+            if (retryCount < 3) {
+                // Exponential backoff: 10s, 20s, 30s
+                const waitTime = (retryCount + 1) * 10000;
+
+                // If we've failed twice WITH search, try WITHOUT search on the next retry
+                // Grounding (Google Search) often has very tight RPM limits.
+                const nextSearchSetting = (retryCount >= 1) ? false : search;
+
+                console.warn(`[Rate Limit] Waiting ${waitTime / 1000}s before retry #${retryCount + 1}... ${nextSearchSetting === false && search === true ? '(Disabling Grounding for stability)' : ''}`);
+
+                await new Promise(r => setTimeout(r, waitTime));
+                return generateAIResponse(activeModel, prompt, schema, nextSearchSetting, retryCount + 1);
+            }
         }
-        throw error;
+
+        // For other errors, only retry once after 3s
+        if (!isRetry && !isRateLimit && activeModel === 'gemini-2.0-flash') {
+            console.warn(`[Retry] Transient error. Waiting 3s...`);
+            await new Promise(r => setTimeout(r, 3000));
+            return generateAIResponse(activeModel, prompt, schema, search, 1);
+        }
+
+        throw new Error(`AI Service (${activeModel}) failed (Final attempt): ${error.message}`);
     }
 }
 
@@ -87,16 +127,15 @@ app.post('/api/extract-syllabus', async (req, res) => {
         const { text, lang } = req.body;
         // Increase context window for syllabus
         const contextText = text.length > 50000 ? text.substring(0, 50000) : text;
-        const prompt = `Extract TNPSC Group 1 syllabus from this text into structured JSON. 
+        const prompt = `Extract ${lang === 'ta' ? 'தமிழ்' : 'TNPSC'} syllabus into structured JSON. 
         Format: [{ "subject": "History", "topics": [{ "name": "Topic", "subtopics": ["Sub"], "weightage": "High" | "Medium" | "Low", "marksWeight": number }] }]. 
         Weightage Assignment Rules:
         - High: Core topics (e.g., Unit 8, Unit 9, Polity, INM, Aptitude). marksWeight should be 8-12.
         - Medium: Current Affairs, Geography, Economy. marksWeight should be 4-7.
         - Low: General Science core, specific minor units. marksWeight should be 1-3.
-        Language: ${lang}. 
+        Language: ${lang === 'ta' ? 'Tamil' : 'English'}. 
         Content: ${contextText}`;
 
-        // Use 2.5-flash for speed and reliability
         const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true);
         res.json({ success: true, data: cleanAndParseJSON(responseText) });
     } catch (error) {
@@ -149,8 +188,9 @@ END DATE: ${endDate.toISOString().split('T')[0]}
 EXAM DATE: ${config.examDate} (${daysUntilExam} days remaining)
 STUDY HOURS/DAY: ${config.studyHoursPerDay}
 TECHNIQUES: ${config.preferredMethods?.join(', ')}
+LANGUAGE: ${lang === 'ta' ? 'Tamil' : 'English'}
 
-SYLLABUS: ${JSON.stringify(syllabus).substring(0, 10000)}
+SYLLABUS: ${JSON.stringify(syllabus).substring(0, 30000)}
 ${progressContext}
 
 ${intensityNote}
@@ -193,7 +233,8 @@ app.get('/api/current-affairs', async (req, res) => {
         const { lang } = req.query;
         const prompt = `Find 5-6 latest TNPSC current affairs from the past 7 days.
         Categories: STATE (Tamil Nadu), NATIONAL (India), ECONOMY, SCIENCE, INTERNATIONAL.
-        Return EXCLUSIVELY a JSON array of objects with keys: title, summary, category, date.
+        Relevance: High (Core syllabus), Medium (General awareness), Low (FYI).
+        Return EXCLUSIVELY a JSON array of objects with keys: title, summary, category, date, relevance.
         DO NOT include any markdown formatting or code blocks, just the raw JSON text.
         Language: ${lang === 'ta' ? 'Tamil' : 'English'}.
         Topics should be relevant to competitive exams like TNPSC.`;
@@ -207,6 +248,7 @@ app.get('/api/current-affairs', async (req, res) => {
             title: n.title || n.Name || "Current Event",
             summary: n.summary || n.Description || n.content || "",
             category: (n.category || "GENERAL").toUpperCase(),
+            relevance: (n.relevance || "Medium").charAt(0).toUpperCase() + (n.relevance || "Medium").slice(1).toLowerCase(),
             date: n.date || new Date().toISOString().split('T')[0],
             sources: sources.slice(0, 2)
         }));
@@ -218,18 +260,78 @@ app.get('/api/current-affairs', async (req, res) => {
     }
 });
 
+app.post('/api/topic-quiz', async (req, res) => {
+    console.log("-> /api/topic-quiz");
+    try {
+        const { topic, lang } = req.body;
+        const normalizedTopic = topic.trim().toLowerCase();
+
+        // 1. Check Local Cache First
+        let quizBank = {};
+        if (fs.existsSync(QUIZ_BANK_PATH)) {
+            try {
+                quizBank = JSON.parse(fs.readFileSync(QUIZ_BANK_PATH, 'utf8'));
+            } catch (err) {
+                console.error("Quiz bank parse error:", err);
+            }
+        }
+
+        const cacheKey = `${lang}_${normalizedTopic}`;
+        if (quizBank[cacheKey]) {
+            console.log(`[Cache Hit] Serving questions for: ${topic}`);
+            return res.json({ success: true, data: quizBank[cacheKey] });
+        }
+
+        // 2. Fallback to AI if not in cache
+        console.log(`[Cache Miss] Calling AI for: ${topic}`);
+        const prompt = `As a TNPSC/Competitive Exam Expert, generate a Mastery Quiz (10 MCQs) specifically for the topic: "${topic}".
+        INSTRUCTIONS:
+        1. Search the internet for actual recent exam questions (2024-2025) related to this topic.
+        2. Ensure the difficulty is High to test deep mastery.
+        3. Follow standard exam format (Options A, B, C, D).
+        4. Return EXCLUSIVELY a JSON array of objects with keys: question, options (array), correctAnswer (string, e.g., "A"), explanation.
+        Language: ${lang === 'ta' ? 'Tamil' : 'English'}.`;
+
+        const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true, true);
+        const quizData = cleanAndParseJSON(responseText);
+
+        // 3. Save to Cache on success
+        quizBank[cacheKey] = quizData;
+        try {
+            fs.writeFileSync(QUIZ_BANK_PATH, JSON.stringify(quizBank, null, 2));
+        } catch (err) {
+            console.error("Failed to save to quiz bank:", err);
+        }
+
+        res.json({ success: true, data: quizData });
+    } catch (error) {
+        console.error("[ERROR] Quiz generation failed:", error.message);
+
+        // FINAL RESILIENCE: If AI fails and no cache, serve high-quality static questions
+        console.warn(`[Failover] Serving Generic TNPSC Quiz as last resort for: ${topic}`);
+        res.json({
+            success: true,
+            data: GENERIC_TNPSC_QUIZ,
+            isFailover: true,
+            originalError: error.message
+        });
+    }
+});
+
 app.post('/api/practice-question', async (req, res) => {
     console.log("-> /api/practice-question");
     try {
         const { topics, questionPapers, lang } = req.body;
-        const prompt = `As a TNPSC Examiner, generate 5 difficult MCQs based on these topics: ${topics.join(', ')}. 
-        Latest TNPSC trends must be followed.
+        const prompt = `As a TNPSC/Competitive Exam Expert, find and generate 5 high-quality MCQs based on these topics: ${topics.join(', ')}. 
+        IMPORTANT: These questions should be modeled after REAL Previous Year Questions (PYQs). Use the internet to check recent trends (2024-2025).
+        
         Requirement: Include exactly 5 questions.
         Specific Requirement: One question MUST be of 'Assertion and Reason' type.
         Return EXCLUSIVELY a JSON array: [{ "question": "...", "explanation": "..." }].
-        Language: ${lang}. 
+        Language: ${lang === 'ta' ? 'Tamil' : 'English'}. 
         Context: ${questionPapers?.substring(0, 5000)}`;
-        const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true);
+
+        const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true, true);
         res.json({ success: true, data: cleanAndParseJSON(responseText) });
     } catch (error) {
         console.error("[ERROR]", error);
@@ -254,8 +356,17 @@ app.post('/api/mock-test', async (req, res) => {
     console.log("-> /api/mock-test");
     try {
         const { completedTopics, oldPapers, lang } = req.body;
-        const prompt = `As a TNPSC Examiner, generate a Mock Test (10 MCQs) in ${lang === 'ta' ? 'Tamil' : 'English'}. Topics: ${completedTopics.join(', ')}. Context: ${oldPapers?.substring(0, 5000)}. Return JSON array of objects with {question, options, correctAnswer, explanation}.`;
-        const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true);
+        const prompt = `As a TNPSC Senior Examiner, generate a formal Mock Test (10 MCQs) based on: ${completedTopics.join(', ')}.
+        INSTRUCTIONS:
+        1. Search the internet for actual TNPSC/UPSC questions related to these topics to ensure credibility.
+        2. Follow the standard exam format (Options A, B, C, D).
+        3. Match the difficulty level of 2024-2025 exams.
+        
+        Return EXCLUSIVELY a JSON array of objects with {question, options, correctAnswer, explanation}.
+        Language: ${lang === 'ta' ? 'Tamil' : 'English'}. 
+        Context: ${oldPapers?.substring(0, 5000)}.`;
+
+        const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true, true);
         res.json({ success: true, data: cleanAndParseJSON(responseText) });
     } catch (error) {
         console.error("[ERROR]", error);
@@ -278,8 +389,6 @@ app.post('/api/parse-schedule', async (req, res) => {
 
 
 // State Persistence
-const fs = require('fs');
-const path = require('path');
 const STATE_DIR = path.join(__dirname, 'data', 'states');
 const SETTINGS_FILE = path.join(__dirname, 'data', 'settings.json');
 
@@ -429,6 +538,36 @@ app.get('/api/admin/subscribers', (req, res) => {
             } catch (e) { return null; }
         }).filter(u => u);
         res.json({ success: true, data: users });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get('/api/leaderboard', (req, res) => {
+    try {
+        const files = fs.readdirSync(STATE_DIR);
+        const entries = files.map(file => {
+            try {
+                const data = fs.readFileSync(path.join(STATE_DIR, file), 'utf8');
+                const json = JSON.parse(data);
+                const state = json.state || json;
+                const user = json.user || state.user; // fallback to legacy user if within state
+
+                if (!state || !state.user) return null;
+
+                return {
+                    name: `Candidate #${file.slice(0, 4)}`, // Anonymized
+                    exam: state.user.examName || 'TNPSC',
+                    level: state.level || 1,
+                    xp: state.xp || 0,
+                    streak: state.streak || 0
+                };
+            } catch (e) { return null; }
+        }).filter(e => e)
+            .sort((a, b) => (b.level * 1000 + b.xp) - (a.level * 1000 + a.xp)) // Sort by rank
+            .slice(0, 10); // Top 10
+
+        res.json({ success: true, data: entries });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }

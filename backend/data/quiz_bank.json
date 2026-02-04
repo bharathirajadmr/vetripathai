@@ -1,0 +1,39 @@
+{
+    "en_indus valley civilization": [
+        {
+            "question": "Which of the following Indus Valley sites is located in India?",
+            "options": [
+                "Harappa",
+                "Mohenjo-daro",
+                "Lothal",
+                "Chanhudaro"
+            ],
+            "correctAnswer": "C",
+            "explanation": "Lothal is located in Gujarat, India, and was an important port city of the Indus Valley Civilization."
+        },
+        {
+            "question": "The Great Bath was found at which Indus Valley site?",
+            "options": [
+                "Harappa",
+                "Mohenjo-daro",
+                "Kalibangan",
+                "Ropar"
+            ],
+            "correctAnswer": "B",
+            "explanation": "The Great Bath, one of the most well-known structures of the Indus Valley Civilization, was discovered at Mohenjo-daro."
+        }
+    ],
+    "en_indian national congress": [
+        {
+            "question": "Who was the first President of the Indian National Congress?",
+            "options": [
+                "Dadabhai Naoroji",
+                "W.C. Bonnerjee",
+                "A.O. Hume",
+                "Badruddin Tyabji"
+            ],
+            "correctAnswer": "B",
+            "explanation": "Womesh Chandra Bonnerjee was the first president of the INC session held in Bombay in 1885."
+        }
+    ]
+}

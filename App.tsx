@@ -178,7 +178,10 @@ const MainApp: React.FC = () => {
   };
 
   const handleRegenerateSchedule = async () => {
-    if (!state.syllabus || !state.user) return;
+    if (!state.syllabus || !state.user) {
+      setState(prev => ({ ...prev, setupMode: 'ai' }));
+      return;
+    }
 
     setLoading(true);
     try {
@@ -318,14 +321,22 @@ const MainApp: React.FC = () => {
                     state.currentAffairs.map(ca => (
                       <div key={ca.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all group">
                         <div className="flex justify-between items-start mb-4">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase ${ca.category === 'STATE' ? 'bg-purple-100 text-purple-700' :
-                            ca.category === 'NATIONAL' ? 'bg-blue-100 text-blue-700' :
-                              ca.category === 'ECONOMY' ? 'bg-green-100 text-green-700' :
-                                ca.category === 'SCIENCE' ? 'bg-amber-100 text-amber-700' :
-                                  'bg-gray-100 text-gray-700'
-                            }`}>
-                            {ca.category}
-                          </span>
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase ${ca.category === 'STATE' ? 'bg-purple-100 text-purple-700' :
+                              ca.category === 'NATIONAL' ? 'bg-blue-100 text-blue-700' :
+                                ca.category === 'ECONOMY' ? 'bg-green-100 text-green-700' :
+                                  ca.category === 'SCIENCE' ? 'bg-amber-100 text-amber-700' :
+                                    'bg-gray-100 text-gray-700'
+                              }`}>
+                              {ca.category}
+                            </span>
+                            <span className={`px-2 py-1 rounded-full text-[8px] font-black tracking-widest uppercase border ${ca.relevance === 'High' ? 'bg-red-50 text-red-600 border-red-100' :
+                              ca.relevance === 'Medium' ? 'bg-sky-50 text-sky-600 border-sky-100' :
+                                'bg-gray-50 text-gray-500 border-gray-100'
+                              }`}>
+                              {ca.relevance}
+                            </span>
+                          </div>
                           <span className="text-xs font-medium text-gray-400">{ca.date}</span>
                         </div>
                         <h3 className="font-bold text-gray-900 text-lg mb-3 leading-snug group-hover:text-sky-600 transition-colors">

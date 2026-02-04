@@ -72,7 +72,7 @@ const SetupView: React.FC<SetupViewProps> = ({ lang, onComplete }) => {
             }
 
             setLoadingStatus(lang === 'en' ? 'AI is analyzing syllabus...' : 'AI பாடத்திட்டத்தை ஆய்வு செய்கிறது...');
-            const syllabus = await extractSyllabus(finalSyllabusText);
+            const syllabus = await extractSyllabus(finalSyllabusText, lang);
 
             setLoadingStatus(lang === 'en' ? 'Generating your personalized plan...' : 'உங்கள் தனிப்பயன் திட்டத்தை உருவாக்குகிறது...');
             const schedule = await generateSchedule(syllabus, config, papersText);

@@ -27,8 +27,8 @@ async function apiCall<T>(path: string, method: string = 'GET', body?: any): Pro
   return result.data;
 }
 
-export async function extractSyllabus(text: string): Promise<SyllabusItem[]> {
-  return apiCall<SyllabusItem[]>('/api/extract-syllabus', 'POST', { text });
+export async function extractSyllabus(text: string, lang: 'en' | 'ta'): Promise<SyllabusItem[]> {
+  return apiCall<SyllabusItem[]>('/api/extract-syllabus', 'POST', { text, lang });
 }
 
 export async function fetchWeeklyCurrentAffairs(lang: 'en' | 'ta'): Promise<CurrentAffairItem[]> {

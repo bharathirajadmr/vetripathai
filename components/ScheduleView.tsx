@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { TRANSLATIONS } from '../constants';
+import { TRANSLATIONS, API_URL } from '../constants';
 import { Language, StudyDay } from '../types';
 
 interface ScheduleViewProps {
@@ -16,59 +16,137 @@ interface ScheduleViewProps {
 const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTask, onMarkHard, hardTopics = [], onRegenerateSchedule, loading }) => {
     const t = TRANSLATIONS[lang];
     const [validationModal, setValidationModal] = React.useState<{ dayId: string; taskIdx: number; taskName: string } | null>(null);
-    const [mcqCount, setMcqCount] = React.useState<string>('20');
+    const [quizLoading, setQuizLoading] = React.useState(false);
+    const [quizQuestions, setQuizQuestions] = React.useState<any[] | null>(null);
+    const [currentQuestion, setCurrentQuestion] = React.useState(0);
+    const [answers, setAnswers] = React.useState<string[]>([]);
+    const [quizScore, setQuizScore] = React.useState<number | null>(null);
+
+    const startQuiz = async (dayId: string, taskIdx: number, taskName: string) => {
+        setValidationModal({ dayId, taskIdx, taskName });
+        setQuizLoading(true);
+        setQuizQuestions(null);
+        setCurrentQuestion(0);
+        setAnswers([]);
+        setQuizScore(null);
+
+        try {
+            const response = await fetch(`${API_URL}/api/topic-quiz`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ topic: taskName, lang })
+            });
+            const result = await response.json();
+            if (result.success) {
+                setQuizQuestions(result.data);
+            }
+        } catch (error) {
+            console.error("Failed to load quiz", error);
+        } finally {
+            setQuizLoading(false);
+        }
+    };
+
+    const handleAnswer = (option: string) => {
+        const newAnswers = [...answers, option];
+        setAnswers(newAnswers);
+        if (currentQuestion < 9) {
+            setCurrentQuestion(currentQuestion + 1);
+        } else {
+            // Calculate Score
+            let score = 0;
+            quizQuestions?.forEach((q, idx) => {
+                if (newAnswers[idx] === q.correctAnswer) score++;
+            });
+            setQuizScore(score);
+        }
+    };
 
     const handleConfirmToggle = () => {
-        if (validationModal) {
-            onToggleTask(validationModal.dayId, validationModal.taskIdx, parseInt(mcqCount) || 0);
+        if (validationModal && quizScore !== null) {
+            // We pass the score as the "mcqCount" equivalent for the existing logic
+            // The existing backend/storage uses mcqCount >= 20 for mastery,
+            // so we scale the score (e.g., 10/10 -> 20, 5/10 -> 10)
+            onToggleTask(validationModal.dayId, validationModal.taskIdx, quizScore * 2);
             setValidationModal(null);
-            setMcqCount('20');
         }
     };
 
     return (
         <div className="space-y-8 pb-20">
-            {/* Validation Modal */}
+            {/* AI Mastery Validation Modal */}
             {validationModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-sky-900/40 backdrop-blur-sm" onClick={() => setValidationModal(null)}></div>
-                    <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl relative z-10 animate-in zoom-in duration-300">
-                        <div className="text-center mb-6">
-                            <div className="w-16 h-16 bg-sky-100 text-sky-600 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">📝</div>
-                            <h3 className="text-xl font-black text-gray-900">Evidence Check</h3>
-                            <p className="text-gray-500 text-sm mt-1">{validationModal.taskName}</p>
-                        </div>
-
-                        <div className="space-y-4">
-                            <label className="block text-xs font-black text-gray-400 uppercase tracking-widest text-center">
-                                How many MCQs did you practice?
-                            </label>
-                            <input
-                                type="number"
-                                value={mcqCount}
-                                onChange={(e) => setMcqCount(e.target.value)}
-                                className="w-full bg-gray-50 border-0 rounded-2xl px-6 py-4 text-center text-3xl font-black text-sky-600 focus:ring-2 focus:ring-sky-500 outline-none"
-                                autoFocus
-                            />
-                            <p className="text-[10px] text-center text-gray-400 font-bold uppercase italic">
-                                * Minimum 20 MCQs recommended for Mastery
-                            </p>
-
-                            <div className="grid grid-cols-2 gap-3 pt-4">
-                                <button
-                                    onClick={() => setValidationModal(null)}
-                                    className="px-6 py-4 rounded-2xl font-black text-gray-500 hover:bg-gray-100 transition-all"
-                                >
-                                    Cancel
-                                </button>
+                    <div className="absolute inset-0 bg-sky-900/60 backdrop-blur-md" onClick={() => !quizLoading && setValidationModal(null)}></div>
+                    <div className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl relative z-10 animate-in zoom-in duration-300 overflow-hidden">
+                        {quizLoading ? (
+                            <div className="py-12 text-center space-y-4">
+                                <div className="w-20 h-20 bg-sky-50 rounded-full flex items-center justify-center mx-auto mb-4 relative">
+                                    <div className="absolute inset-0 border-4 border-sky-100 border-t-sky-600 rounded-full animate-spin"></div>
+                                    <span className="text-3xl">🧩</span>
+                                </div>
+                                <h3 className="text-xl font-black text-sky-900">Generating Mastery Quiz</h3>
+                                <p className="text-gray-500 animate-pulse text-sm">Finding actual exam trends for {validationModal.taskName}...</p>
+                            </div>
+                        ) : quizScore !== null ? (
+                            <div className="text-center space-y-6">
+                                <div className="w-24 h-24 bg-sky-50 rounded-full flex items-center justify-center mx-auto text-5xl">
+                                    {quizScore >= 9 ? '👑' : quizScore >= 7 ? '⭐' : '📖'}
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-black text-sky-900">Quiz Completed!</h3>
+                                    <p className="text-sky-600 font-bold text-lg mt-1">Score: {quizScore}/10</p>
+                                    <div className="mt-4 px-6 py-3 rounded-2xl bg-gray-50 text-sm font-medium text-gray-600 italic">
+                                        {quizScore === 10 ? "Absolute Mastery! You're ready for the exam." :
+                                            quizScore >= 8 ? "Excellent! Minor revision might help." :
+                                                quizScore >= 5 ? "Good start, but focus on the explanations below." :
+                                                    "Needs more focus. Study the core concepts again."}
+                                    </div>
+                                </div>
                                 <button
                                     onClick={handleConfirmToggle}
-                                    className="px-6 py-4 bg-sky-600 text-white rounded-2xl font-black shadow-lg shadow-sky-200 hover:bg-sky-700 transition-all active:scale-95"
+                                    className="w-full bg-sky-600 text-white py-5 rounded-3xl font-black text-lg shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all active:scale-95"
                                 >
-                                    Confirm
+                                    Finish & Save Progress
                                 </button>
                             </div>
-                        </div>
+                        ) : quizQuestions ? (
+                            <div className="space-y-6">
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="px-4 py-1.5 bg-sky-100 text-sky-700 text-xs font-black rounded-full uppercase tracking-widest">Question {currentQuestion + 1}/10</span>
+                                    <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-sky-600 transition-all duration-500" style={{ width: `${(currentQuestion + 1) * 10}%` }}></div>
+                                    </div>
+                                </div>
+                                <p className="text-xl font-black text-slate-800 leading-tight min-h-[5rem]">
+                                    {quizQuestions[currentQuestion].question}
+                                </p>
+                                <div className="grid grid-cols-1 gap-3">
+                                    {quizQuestions[currentQuestion].options.map((opt: string, i: number) => {
+                                        const label = String.fromCharCode(65 + i); // A, B, C, D
+                                        return (
+                                            <button
+                                                key={i}
+                                                onClick={() => handleAnswer(label)}
+                                                className="group flex items-center p-4 rounded-2xl border-2 border-slate-100 hover:border-sky-500 hover:bg-sky-50 transition-all text-left"
+                                            >
+                                                <span className="w-8 h-8 rounded-lg bg-slate-100 group-hover:bg-sky-200 text-slate-500 group-hover:text-sky-700 flex items-center justify-center font-black mr-4 shrink-0 transition-colors">
+                                                    {label}
+                                                </span>
+                                                <span className="font-bold text-slate-700 group-hover:text-sky-900 leading-tight">
+                                                    {opt}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-center py-6">
+                                <h3 className="text-xl font-black text-red-600">Failed to load quiz.</h3>
+                                <button onClick={() => setValidationModal(null)} className="mt-4 text-sky-600 font-bold underline">Close</button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -124,7 +202,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTas
                                                     if (isTaskDone) {
                                                         onToggleTask(day.id, idx, 0);
                                                     } else {
-                                                        setValidationModal({ dayId: day.id, taskIdx: idx, taskName: task });
+                                                        startQuiz(day.id, idx, task);
                                                     }
                                                 }}
                                                 className="flex items-center space-x-3 cursor-pointer flex-1"
@@ -136,7 +214,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTas
                                                     <span className={`text-sm font-bold ${isTaskDone ? 'text-green-600 dark:text-green-400 line-through opacity-60' : 'text-gray-700 dark:text-gray-300'}`}>{task}</span>
                                                     {isTaskDone && mcqValue > 0 && (
                                                         <span className="text-[9px] font-black text-sky-500 uppercase tracking-tighter">
-                                                            {mcqValue} MCQs Practices {mcqValue >= 20 ? '✅ Mastery' : '⚠️ Low Validation'}
+                                                            Mastery Score: {mcqValue / 2}/10 {mcqValue >= 18 ? '✅ Mastery' : '⚠️ Low Validation'}
                                                         </span>
                                                     )}
                                                 </div>

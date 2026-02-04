@@ -8,6 +8,17 @@ interface SubscriptionPageProps {
     lang: Language;
 }
 
+const formatExpiryDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const day = date.getDate();
+    const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
+    return `${day}-${monthNames[date.getMonth()]}-${date.getFullYear()}`;
+};
+
 const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ lang }) => {
     const { currentUser, upgradeSubscription, activateWithCode } = useAuth();
     const t = TRANSLATIONS[lang];
@@ -187,26 +198,6 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ lang }) => {
                 </p>
             </div>
 
-            {/* Promo Code Section */}
-            <div className="max-w-md mx-auto">
-                <div className="bg-white p-2 rounded-2xl border border-gray-100 shadow-sm flex items-center space-x-2">
-                    <input
-                        type="text"
-                        placeholder={t.promoCode}
-                        value={promoInput}
-                        onChange={(e) => setPromoInput(e.target.value)}
-                        className="flex-1 bg-transparent px-4 py-2 text-sm font-bold outline-none uppercase"
-                    />
-                    <button
-                        onClick={handleApplyPromo}
-                        className="bg-sky-600 text-white px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-sky-700 transition-all"
-                    >
-                        {t.apply}
-                    </button>
-                </div>
-                {promoError && <p className="mt-2 text-center text-[10px] font-black text-red-500 uppercase">{promoError}</p>}
-                {promoSuccess && <p className="mt-2 text-center text-[10px] font-black text-green-600 uppercase">{promoSuccess}</p>}
-            </div>
 
             <div className="grid md:grid-cols-3 gap-8">
                 {plans.map((plan) => {
@@ -260,7 +251,7 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ lang }) => {
                 })}
             </div>
 
-            <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-8">
                 <div>
                     <h4 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-1">Your Status</h4>
                     <div className="flex items-center space-x-3">
@@ -269,15 +260,30 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ lang }) => {
                             {currentUser?.subscriptionStatus}
                         </span>
                         <p className="text-lg font-black text-sky-900">
-                            {lang === 'en' ? 'Expires on' : 'முடிகிறது'}: {new Date(currentUser?.subscriptionExpiry || '').toLocaleDateString()}
+                            {lang === 'en' ? 'Expires on' : 'முடிகிறது'}: {formatExpiryDate(currentUser?.subscriptionExpiry || '')}
                         </p>
                     </div>
                 </div>
-                <p className="text-[10px] text-gray-400 font-bold max-w-xs text-center md:text-right leading-relaxed">
-                    {lang === 'en'
-                        ? 'Note: This is a professional payment preview. Demo codes available: FIRSTOFFICER, VETRI50.'
-                        : 'குறிப்பு: இது ஒரு தொழில்முறை கட்டண முன்னோட்டம். குறியீடுகள்: FIRSTOFFICER, VETRI50.'}
-                </p>
+
+                <div className="flex-1 max-w-sm w-full">
+                    <div className="bg-gray-50 p-2 rounded-2xl border border-gray-100 flex items-center space-x-2">
+                        <input
+                            type="text"
+                            placeholder={t.promoCode}
+                            value={promoInput}
+                            onChange={(e) => setPromoInput(e.target.value)}
+                            className="flex-1 bg-transparent px-4 py-2 text-sm font-bold outline-none uppercase"
+                        />
+                        <button
+                            onClick={handleApplyPromo}
+                            className="bg-sky-600 text-white px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-sky-700 transition-all"
+                        >
+                            {t.apply}
+                        </button>
+                    </div>
+                    {promoError && <p className="mt-2 text-[10px] font-black text-red-500 uppercase px-2">{promoError}</p>}
+                    {promoSuccess && <p className="mt-2 text-[10px] font-black text-green-600 uppercase px-2">{promoSuccess}</p>}
+                </div>
             </div>
 
             {/* Activation Code Section */}
