@@ -1,5 +1,17 @@
 
-export const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/$/, '');
+const getBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  const { hostname } = window.location;
+  return `http://${hostname}:5000`;
+};
+
+export const API_URL = getBaseUrl().replace(/\/$/, '');
+
+export const PROMO_CODES: Record<string, number> = {
+  'VETRI50': 50,
+  'FIRSTOFFICER': 100,
+  'DMR2026': 30
+};
 
 export const TRANSLATIONS = {
   en: {
@@ -129,7 +141,31 @@ export const TRANSLATIONS = {
     logout: "Logout",
     sessionExpired: "Your session has expired. Please login again.",
     deviceConflict: "You have been logged out because a login was detected from a different device.",
-    trialMessage: "You are currently on a 7-day free trial."
+    trialMessage: "You are currently on a 7-day free trial.",
+    rankJourney: "Career Progression",
+    nextRank: "Next Milestone",
+    careerPath: "Career Path",
+    xpGuideTitle: "How to Level Up",
+    xpGuideTask: "Log Progress: 5 XP",
+    xpGuideMastery: "Mastery (20+ MCQs): 15 XP",
+    xpGuideDay: "Complete All Tasks: 30 XP",
+    promoCode: "Promo Code",
+    apply: "Apply",
+    invalidPromo: "Invalid promo code",
+    promoApplied: "Promo code applied!",
+    checkoutTitle: "Secure Checkout",
+    completePayment: "Complete Payment",
+    newPassword: "New Password",
+    confirmReset: "Reset Password",
+    resetEmailSent: "✅ Reset link sent! Now enter your new password below.",
+    upiId: "officer@gpay",
+    manualPaymentInstructions: "1. Pay the amount to the UPI ID above using GPay/PhonePe.\n2. Take a screenshot of the payment.\n3. Click the button below to send the screenshot on WhatsApp for activation.",
+    sendWhatsApp: "Send Proof on WhatsApp",
+    activationCodeLabel: "Enter Activation Code",
+    activationPlaceholder: "VETRI-PRO-XXXX",
+    activateButton: "Activate Pro",
+    invalidCode: "Invalid activation code",
+    codeSuccess: "Pro access activated successfully! Welcome aboard, Officer."
   },
   ta: {
     dashboard: "தகவல் பலகை",
@@ -258,7 +294,31 @@ export const TRANSLATIONS = {
     logout: "வெளியேறு",
     sessionExpired: "உங்கள் அமர்வு முடிந்தது. மீண்டும் உள்நுழையவும்.",
     deviceConflict: "வேறு சாதனத்திலிருந்து உள்நுழைவு கண்டறியப்பட்டதால் நீங்கள் வெளியேற்றப்பட்டீர்கள்.",
-    trialMessage: "நீங்கள் 7 நாள் இலவச சோதனையில் உள்ளீர்கள்."
+    trialMessage: "நீங்கள் 7 நாள் இலவச சோதனையில் உள்ளீர்கள்.",
+    rankJourney: "பதவி உயர்வுப் பாதை",
+    nextRank: "அடுத்த மைல்கல்",
+    careerPath: "தொழில்முறைப் பாதை",
+    xpGuideTitle: "முன்னேறுவது எப்படி?",
+    xpGuideTask: "முன்னேற்றப் பதிவு: 5 XP",
+    xpGuideMastery: "முழுமையான தேர்ச்சி: 15 XP",
+    xpGuideDay: "அனைத்து பணிகள்: 30 XP",
+    promoCode: "சலுகைக் குறியீடு",
+    apply: "பயன்படுத்து",
+    invalidPromo: "தவறான சலுகைக் குறியீடு",
+    promoApplied: "சலுகைக் குறியீடு இணைக்கப்பட்டது!",
+    checkoutTitle: "பாதுகாப்பான கட்டணம்",
+    completePayment: "கட்டணத்தைச் செலுத்தவும்",
+    newPassword: "புதிய கடவுச்சொல்",
+    confirmReset: "கடவுச்சொல்லை மாற்று",
+    resetEmailSent: "✅ இணைப்பு அனுப்பப்பட்டது! இப்போது புதிய கடவுச்சொல்லை உள்ளிடவும்.",
+    upiId: "officer@gpay",
+    manualPaymentInstructions: "1. மேலேயுள்ள UPI ID-க்கு GPay/PhonePe மூலம் கட்டணத்தைச் செலுத்தவும்.\n2. கட்டணப் பதிவை (Screenshot) எடுக்கவும்.\n3. கீழே உள்ள பட்டனை அழுத்தி WhatsApp மூலம் கட்டணப் பதிவை அனுப்பித் தெரியப்படுத்தவும்.",
+    sendWhatsApp: "WhatsApp மூலம் உறுதிப்படுத்தவும்",
+    activationCodeLabel: "செயலாக்கக் குறியீட்டை (Code) உள்ளிடவும்",
+    activationPlaceholder: "VETRI-PRO-XXXX",
+    activateButton: "Pro வசதியைப் பெறு",
+    invalidCode: "தவறான செயலாக்கக் குறியீடு",
+    codeSuccess: "Pro வசதி வெற்றிகரமாகச் செயல்படுத்தப்பட்டது! வருக அதிகாரியே."
   }
 };
 

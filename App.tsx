@@ -15,6 +15,7 @@ import SetupView from './components/SetupView.tsx';
 import SyllabusView from './components/SyllabusView.tsx';
 import HistoryView from './components/HistoryView.tsx';
 import SubscriptionPage from './pages/Subscription.tsx';
+import AdminPage from './pages/Admin.tsx';
 import { getMotivationalQuote, generateSchedule, fetchWeeklyCurrentAffairs } from './services/gemini.ts';
 
 const MainApp: React.FC = () => {
@@ -71,7 +72,7 @@ const MainApp: React.FC = () => {
 
   // Save state when state or user changes
   useEffect(() => {
-    saveState(state, currentUser?.email);
+    saveState(state, currentUser?.email, currentUser || undefined);
   }, [state, currentUser]);
 
   const handleFetchCA = async () => {
@@ -96,10 +97,17 @@ const MainApp: React.FC = () => {
     }));
     setLang(config.language);
     setTheme(config.theme || 'light');
-    setActiveTab('dashboard');
+    setActiveTab('schedule'); // Switch to schedule after generation
+
+    // Show success message
+    setTimeout(() => {
+      alert(config.language === 'en'
+        ? '🎉 Congratulations! Your personalized study plan has been generated. Head over to the Schedule tab to start your journey!'
+        : '🎉 வாழ்த்துகள்! உங்கள் தனிப்பயன் ஆய்வுத் திட்டம் உருவாக்கப்பட்டது. உங்கள் பயணத்தைத் தொடங்க அட்டவணை (Schedule) பகுதிக்குச் செல்லுங்கள்!');
+    }, 500);
   };
 
-  const handleToggleTask = (dayId: string, taskIndex: number) => {
+  const handleToggleTask = (dayId: string, taskIndex: number, mcqCount: number = 0) => {
     setState(prev => {
       if (!prev.schedule) return prev;
 
@@ -110,13 +118,20 @@ const MainApp: React.FC = () => {
           const task = day.tasks[taskIndex];
           const completedTasks = day.completedTasks || [];
           const isDone = completedTasks.includes(task);
+
           const nextCompleted = isDone
             ? completedTasks.filter(t => t !== task)
             : [...completedTasks, task];
 
+          const nextMcqs = { ...(day.mcqsAttempted || {}) };
+          if (isDone) {
+            delete nextMcqs[task];
+          } else {
+            nextMcqs[task] = mcqCount;
+          }
+
           if (!isDone) {
-            xpGain += 10;
-            // Check for 'first_step' badge
+            xpGain += mcqCount >= 20 ? 15 : 5; // More XP for mastery
             if (!earnedBadges.find(b => b.id === 'first_step')) {
               const def = BADGE_DEFINITIONS.find(b => b.id === 'first_step');
               if (def) earnedBadges.push({ ...def, unlockedDate: new Date().toISOString() });
@@ -124,18 +139,10 @@ const MainApp: React.FC = () => {
           }
 
           const dayFullyCompleted = nextCompleted.length === day.tasks.length;
-          if (dayFullyCompleted && !day.isCompleted) {
-            xpGain += 50; // Bonus for finishing a day
-            // Check for 'perfectionist' badge
-            if (!earnedBadges.find(b => b.id === 'perfectionist')) {
-              const def = BADGE_DEFINITIONS.find(b => b.id === 'perfectionist');
-              if (def) earnedBadges.push({ ...def, unlockedDate: new Date().toISOString() });
-            }
-          }
-
           return {
             ...day,
             completedTasks: nextCompleted,
+            mcqsAttempted: nextMcqs,
             isCompleted: dayFullyCompleted
           };
         }
@@ -223,8 +230,6 @@ const MainApp: React.FC = () => {
 
   const t = TRANSLATIONS[lang];
 
-  // If no schedule and not in setup, or if user explicitly wants setup
-  const showSetup = !state.schedule || state.setupMode === 'ai';
 
   return (
     <Layout
@@ -238,9 +243,10 @@ const MainApp: React.FC = () => {
       streak={state.streak}
       theme={theme}
       toggleTheme={toggleTheme}
+      hasSchedule={!!state.schedule && state.schedule.length > 0}
     >
       <div className="space-y-6">
-        {showSetup ? (
+        {state.setupMode === 'ai' ? (
           <SetupView lang={lang} onComplete={handleSetupComplete} />
         ) : (
           <>
@@ -389,6 +395,7 @@ const App: React.FC = () => {
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<MainApp />} />
             <Route path="/subscription" element={<MainApp />} />
+            <Route path="/admin" element={<AdminPage />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />

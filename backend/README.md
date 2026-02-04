@@ -1,6 +1,6 @@
-# VetriPathai Pro - Backend API
+# Vetri Pathai Pro - Backend API
 
-Node.js/Express backend for VetriPathai Pro TNPSC exam preparation app.
+Node.js/Express backend for Vetri Pathai Pro TNPSC exam preparation app.
 
 ## 🚀 Features
 

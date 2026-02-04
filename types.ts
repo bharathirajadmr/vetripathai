@@ -31,6 +31,8 @@ export interface SyllabusItem {
     name: string;
     subtopics: string[];
     difficulty?: number;
+    weightage?: 'High' | 'Medium' | 'Low';
+    marksWeight?: number;
   }[];
 }
 
@@ -62,6 +64,7 @@ export interface StudyDay {
   tasks: string[];
   isCompleted: boolean;
   completedTasks?: string[];
+  mcqsAttempted?: Record<string, number>; // Mapping task to MCQ count
   actualHours?: number;
   confidence?: number;
   notes?: string;
@@ -98,6 +101,7 @@ export interface AppState {
   streakHistory?: string[];
   currentAffairs?: CurrentAffairItem[];
   motivation?: string;
+  mentorInsights?: string[];
 }
 
 export interface DashboardStats {
@@ -115,4 +119,25 @@ export interface SearchResult {
   date?: string;
   relatedNotes?: string;
   id?: string;
+}
+
+export interface GlobalSettings {
+  upiId: string;
+  promoCodes: Record<string, number>;
+  rateCard: {
+    name: string;
+    rawPrice: number;
+    price: string;
+    period: string;
+    features: string[];
+    color: string;
+    popular: boolean;
+  }[];
+}
+
+export interface AdminStats {
+  totalUsers: number;
+  activePro: number;
+  trials: number;
+  recentUsers: User[];
 }

@@ -6,7 +6,7 @@ import { Language, StudyDay } from '../types';
 interface ScheduleViewProps {
     lang: Language;
     schedule: StudyDay[];
-    onToggleTask: (dayId: string, taskIndex: number) => void;
+    onToggleTask: (dayId: string, taskIndex: number, mcqCount: number) => void;
     onMarkHard?: (topic: string) => void;
     hardTopics?: string[];
     onRegenerateSchedule?: () => void;
@@ -15,10 +15,64 @@ interface ScheduleViewProps {
 
 const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTask, onMarkHard, hardTopics = [], onRegenerateSchedule, loading }) => {
     const t = TRANSLATIONS[lang];
+    const [validationModal, setValidationModal] = React.useState<{ dayId: string; taskIdx: number; taskName: string } | null>(null);
+    const [mcqCount, setMcqCount] = React.useState<string>('20');
 
-    // Group by month/week or just list
+    const handleConfirmToggle = () => {
+        if (validationModal) {
+            onToggleTask(validationModal.dayId, validationModal.taskIdx, parseInt(mcqCount) || 0);
+            setValidationModal(null);
+            setMcqCount('20');
+        }
+    };
+
     return (
-        <div className="space-y-8">
+        <div className="space-y-8 pb-20">
+            {/* Validation Modal */}
+            {validationModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-sky-900/40 backdrop-blur-sm" onClick={() => setValidationModal(null)}></div>
+                    <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl relative z-10 animate-in zoom-in duration-300">
+                        <div className="text-center mb-6">
+                            <div className="w-16 h-16 bg-sky-100 text-sky-600 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">📝</div>
+                            <h3 className="text-xl font-black text-gray-900">Evidence Check</h3>
+                            <p className="text-gray-500 text-sm mt-1">{validationModal.taskName}</p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="block text-xs font-black text-gray-400 uppercase tracking-widest text-center">
+                                How many MCQs did you practice?
+                            </label>
+                            <input
+                                type="number"
+                                value={mcqCount}
+                                onChange={(e) => setMcqCount(e.target.value)}
+                                className="w-full bg-gray-50 border-0 rounded-2xl px-6 py-4 text-center text-3xl font-black text-sky-600 focus:ring-2 focus:ring-sky-500 outline-none"
+                                autoFocus
+                            />
+                            <p className="text-[10px] text-center text-gray-400 font-bold uppercase italic">
+                                * Minimum 20 MCQs recommended for Mastery
+                            </p>
+
+                            <div className="grid grid-cols-2 gap-3 pt-4">
+                                <button
+                                    onClick={() => setValidationModal(null)}
+                                    className="px-6 py-4 rounded-2xl font-black text-gray-500 hover:bg-gray-100 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleConfirmToggle}
+                                    className="px-6 py-4 bg-sky-600 text-white rounded-2xl font-black shadow-lg shadow-sky-200 hover:bg-sky-700 transition-all active:scale-95"
+                                >
+                                    Confirm
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-black text-sky-900">{t.schedule}</h2>
@@ -58,6 +112,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTas
                             <div className="space-y-3">
                                 {day.tasks.map((task, idx) => {
                                     const isTaskDone = day.completedTasks?.includes(task);
+                                    const mcqValue = day.mcqsAttempted?.[task] || 0;
                                     const isHard = hardTopics.includes(task);
                                     return (
                                         <div
@@ -65,13 +120,26 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTas
                                             className="flex items-center justify-between p-3 rounded-xl border border-transparent hover:border-gray-100 hover:bg-gray-50/50 transition-all group"
                                         >
                                             <div
-                                                onClick={() => onToggleTask(day.id, idx)}
+                                                onClick={() => {
+                                                    if (isTaskDone) {
+                                                        onToggleTask(day.id, idx, 0);
+                                                    } else {
+                                                        setValidationModal({ dayId: day.id, taskIdx: idx, taskName: task });
+                                                    }
+                                                }}
                                                 className="flex items-center space-x-3 cursor-pointer flex-1"
                                             >
                                                 <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${isTaskDone ? 'bg-sky-600 border-sky-600' : 'border-gray-300 group-hover:border-sky-400'}`}>
                                                     {isTaskDone && <span className="text-white text-[10px]">✓</span>}
                                                 </div>
-                                                <span className={`text-sm font-medium ${isTaskDone ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>{task}</span>
+                                                <div className="flex flex-col">
+                                                    <span className={`text-sm font-bold ${isTaskDone ? 'text-green-600 dark:text-green-400 line-through opacity-60' : 'text-gray-700 dark:text-gray-300'}`}>{task}</span>
+                                                    {isTaskDone && mcqValue > 0 && (
+                                                        <span className="text-[9px] font-black text-sky-500 uppercase tracking-tighter">
+                                                            {mcqValue} MCQs Practices {mcqValue >= 20 ? '✅ Mastery' : '⚠️ Low Validation'}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                             {isTaskDone && (
                                                 <button

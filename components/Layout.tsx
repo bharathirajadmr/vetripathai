@@ -13,24 +13,32 @@ interface LayoutProps {
   streak: number;
   theme?: 'light' | 'dark';
   toggleTheme: () => void;
+  hasSchedule?: boolean;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang, setLang, streak, theme = 'light', toggleTheme }) => {
+const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang, setLang, streak, theme = 'light', toggleTheme, hasSchedule = false }) => {
   const t = TRANSLATIONS[lang];
   const { currentUser, logout } = useAuth();
 
-  const NavItem = ({ id, label, icon }: { id: string; label: string; icon: string }) => (
-    <button
-      onClick={() => setActiveTab(id)}
-      className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${activeTab === id
-        ? 'bg-sky-600 text-white shadow-lg shadow-sky-200 dark:shadow-none'
-        : 'text-slate-700 dark:text-gray-300 hover:bg-sky-100 dark:hover:bg-slate-700 hover:text-sky-700 dark:hover:text-sky-400'
-        }`}
-    >
-      <span>{icon}</span>
-      <span className="font-medium whitespace-nowrap">{label}</span>
-    </button>
-  );
+  const NavItem = ({ id, label, icon, restricted }: { id: string; label: string; icon: string; restricted?: boolean }) => {
+    const isDisabled = restricted && !hasSchedule;
+    return (
+      <button
+        onClick={() => !isDisabled && setActiveTab(id)}
+        disabled={isDisabled}
+        title={isDisabled ? (lang === 'en' ? 'Unlocked after plan generation' : 'திட்ட உருவாக்கத்திற்கு பின் திறக்கப்படும்') : ''}
+        className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${activeTab === id
+          ? 'bg-sky-600 text-white shadow-lg shadow-sky-200 dark:shadow-none'
+          : isDisabled
+            ? 'opacity-40 cursor-not-allowed grayscale'
+            : 'text-slate-700 dark:text-gray-300 hover:bg-sky-100 dark:hover:bg-slate-700 hover:text-sky-700 dark:hover:text-sky-400'
+          }`}
+      >
+        <span>{icon}</span>
+        <span className="font-medium whitespace-nowrap">{label}</span>
+      </button>
+    );
+  };
 
   const maskEmail = (email?: string) => {
     if (!email) return '';
@@ -43,9 +51,9 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
     <div className={`min-h-screen flex flex-col ${theme === 'dark' ? 'dark bg-slate-950 text-gray-100' : 'bg-sky-50/30 text-gray-900'}`}>
       <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 sticky top-0 z-50 px-4 md:px-8 py-3 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0 shadow-sm transition-colors">
         <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-3 group cursor-pointer">
-            <img src="/logo.png" alt="VetriPathai" className="h-10 md:h-12 w-auto rounded-xl shadow-md transition-all group-hover:scale-110 group-hover:rotate-3" />
-            <h1 className="text-xl font-black text-sky-900 dark:text-sky-400 tracking-tight">VetriPathai Pro</h1>
+          <div className="flex items-center space-x-3 group cursor-pointer" onClick={() => setActiveTab('dashboard')}>
+            <img src="/logo.png" alt="Vetri Pathai" className="h-10 md:h-12 w-auto rounded-xl shadow-md transition-all group-hover:scale-110 group-hover:rotate-3" />
+            <h1 className="text-xl font-black text-sky-900 dark:text-sky-400 tracking-tight">Vetri Pathai Pro</h1>
           </div>
           <div className="hidden md:flex ml-4 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 px-3 py-1 rounded-full text-[10px] font-bold items-center space-x-1 border border-orange-200 dark:border-orange-800">
             <span>🔥</span>
@@ -55,11 +63,11 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
 
         <nav className="flex space-x-1 bg-gray-50 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700 overflow-x-auto no-scrollbar max-w-full">
           <NavItem id="dashboard" label={t.dashboard} icon="📊" />
-          <NavItem id="schedule" label={t.schedule} icon="📅" />
-          <NavItem id="syllabus" label={t.syllabus} icon="📖" />
+          <NavItem id="schedule" label={t.schedule} icon="📅" restricted />
+          <NavItem id="syllabus" label={t.syllabus} icon="📖" restricted />
           <NavItem id="currentAffairs" label={t.currentAffairs} icon="📰" />
           <NavItem id="subscription" label={lang === 'en' ? 'Subscription' : 'சந்தா'} icon="💳" />
-          <NavItem id="history" label={t.history} icon="📜" />
+          <NavItem id="history" label={t.history} icon="📜" restricted />
         </nav>
 
         <div className="flex items-center space-x-3">
@@ -105,7 +113,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
       <footer className="bg-white dark:bg-slate-900 border-t dark:border-slate-800 py-8 px-4 text-center mt-auto transition-colors">
         <div className="max-w-7xl mx-auto">
           <p className="text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-4">
-            © {new Date().getFullYear()} VetriPathai Pro. Beyond Preparation.
+            © {new Date().getFullYear()} Vetri Pathai Pro. Beyond Preparation.
           </p>
           <div className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">
             <span className="flex items-center">

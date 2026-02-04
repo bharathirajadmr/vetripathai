@@ -1,6 +1,6 @@
 {
-    "name": "VetriPathai Pro",
-    "short_name": "VetriPathai",
+    "name": "Vetri Pathai Pro",
+    "short_name": "Vetri Pathai",
     "description": "Smart AI-powered TNPSC Study Planner",
     "start_url": "/",
     "display": "standalone",

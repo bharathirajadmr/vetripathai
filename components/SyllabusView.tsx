@@ -41,7 +41,19 @@ const SyllabusView: React.FC<SyllabusViewProps> = ({ syllabus, lang }) => {
                             {item.topics.map((topic, tIdx) => (
                                 <div key={tIdx} className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                                     <div className="flex justify-between items-start mb-2">
-                                        <h4 className="font-bold text-gray-800 text-sm">{topic.name}</h4>
+                                        <div className="flex flex-col">
+                                            <h4 className="font-bold text-gray-800 text-sm flex items-center">
+                                                {topic.name}
+                                                {topic.weightage === 'High' && <span className="ml-2 text-xs" title="High Weightage Topic">🔥</span>}
+                                            </h4>
+                                            {topic.weightage && (
+                                                <span className={`text-[8px] font-black uppercase tracking-tighter ${topic.weightage === 'High' ? 'text-red-500' :
+                                                        topic.weightage === 'Medium' ? 'text-orange-500' : 'text-gray-400'
+                                                    }`}>
+                                                    {topic.weightage} Weightage
+                                                </span>
+                                            )}
+                                        </div>
                                         {topic.difficulty && (
                                             <span className="bg-amber-100 text-amber-700 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">
                                                 Level {topic.difficulty}

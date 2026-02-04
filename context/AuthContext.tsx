@@ -8,7 +8,9 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (userData: Partial<User>) => Promise<void>;
-  upgradeSubscription: () => Promise<void>;
+  resetPassword: (email: string, newPassword: string) => Promise<void>;
+  upgradeSubscription: (plan?: string) => Promise<void>;
+  activateWithCode: (code: string) => Promise<void>;
   logout: (reason?: 'manual' | 'expiry' | 'conflict') => void;
   logoutReason: 'manual' | 'expiry' | 'conflict' | null;
   error: string | null;
@@ -87,11 +89,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setCurrentUser(newUser);
   };
 
-  const upgradeSubscription = async () => {
+  const resetPassword = async (email: string, newPass: string) => {
+    setError(null);
+    const user = storage.getUserByEmail(email);
+    if (!user) {
+      throw new Error("Email not found");
+    }
+
+    const updatedUser: User = {
+      ...user,
+      password: newPass
+    };
+
+    storage.saveUser(updatedUser);
+    // If resetting for current user (though usually logged out)
+    if (currentUser?.email === email) {
+      storage.saveSession(updatedUser);
+      setCurrentUser(updatedUser);
+    }
+  };
+
+  const upgradeSubscription = async (plan: string = 'Gold Pro') => {
     if (!currentUser) return;
 
     const expiry = new Date();
-    expiry.setFullYear(expiry.getFullYear() + 1); // 1 year extension
+    if (plan.includes('year') || plan === 'Gold Pro') {
+      expiry.setFullYear(expiry.getFullYear() + 1);
+    } else {
+      expiry.setMonth(expiry.getMonth() + 1);
+    }
 
     const updatedUser: User = {
       ...currentUser,
@@ -102,6 +128,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     storage.saveUser(updatedUser);
     storage.saveSession(updatedUser);
     setCurrentUser(updatedUser);
+  };
+
+  const activateWithCode = async (code: string) => {
+    if (!currentUser) return;
+
+    const formattedCode = code.trim().toUpperCase();
+    const validCodes = ['VETRI-PRO-2026', 'ADMIN-ACTIVATE', 'OFFICER-PRO'];
+
+    if (validCodes.includes(formattedCode)) {
+      await upgradeSubscription('Gold Pro');
+    } else {
+      throw new Error("Invalid activation code");
+    }
   };
 
   const logout = (reason: 'manual' | 'expiry' | 'conflict' = 'manual') => {
@@ -116,7 +155,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isAuthenticated: !!currentUser,
       login,
       signup,
+      resetPassword,
       upgradeSubscription,
+      activateWithCode,
       logout,
       error,
       logoutReason

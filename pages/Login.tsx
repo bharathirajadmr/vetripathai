@@ -9,23 +9,40 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [lang, setLang] = useState<Language>('en');
-  const { login, logoutReason } = useAuth();
+  const { login, resetPassword, logoutReason } = useAuth();
   const navigate = useNavigate();
   const t = TRANSLATIONS[lang];
 
   const [forgotPassword, setForgotPassword] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
     if (forgotPassword) {
       setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setResetSent(true);
-      setLoading(false);
+      try {
+        if (!resetSent) {
+          // Step 1: Simulate email sent
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          setResetSent(true);
+        } else {
+          // Step 2: Actual reset
+          await resetPassword(email, newPassword);
+          setResetSent(false);
+          setForgotPassword(false);
+          setError(lang === 'en' ? '✅ Password updated! Please login.' : '✅ கடவுச்சொல் புதுப்பிக்கப்பட்டது! உள்நுழையவும்.');
+        }
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
       return;
     }
+
     try {
       await login(email, password);
       navigate('/dashboard');
@@ -40,9 +57,9 @@ const Login: React.FC = () => {
     <div className="min-h-screen bg-sky-50 flex flex-col items-center justify-center px-4 py-8">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 border border-sky-100">
         <div className="flex justify-between items-center mb-8">
-          <div className="flex items-center space-x-2">
-            <img src="/logo.png" alt="VetriPathai" className="h-10 w-auto rounded-lg shadow-sm" />
-            <h1 className="text-2xl font-black text-sky-900 tracking-tight">VetriPathai</h1>
+          <div className="flex items-center space-x-3 mb-8">
+            <img src="/logo.png" alt="Vetri Pathai" className="h-10 w-auto rounded-lg shadow-sm" />
+            <h1 className="text-2xl font-black text-sky-900 tracking-tight">Vetri Pathai</h1>
           </div>
           <select
             value={lang}
@@ -57,21 +74,13 @@ const Login: React.FC = () => {
         <h2 className="text-xl font-bold text-gray-800 mb-2">{forgotPassword ? (lang === 'en' ? 'Reset Password' : 'கடவுச்சொல்லை மீட்டமை') : t.login}</h2>
         <p className="text-sm text-gray-500 mb-6 leading-relaxed">
           {forgotPassword
-            ? (lang === 'en' ? 'Enter your email to receive a reset link.' : 'மீட்டமைப்பு இணைப்பைப் பெற உங்கள் மின்னஞ்சலை உள்ளிடவும்.')
+            ? (resetSent ? t.resetEmailSent : (lang === 'en' ? 'Enter your email to receive a reset link.' : 'மீட்டமைப்பு இணைப்பைப் பெற உங்கள் மின்னஞ்சலை உள்ளிடவும்.'))
             : (lang === 'en' ? 'Welcome back, future officer.' : 'மீண்டும் வருக, வருங்கால அதிகாரியே.')}
         </p>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 text-xs font-bold rounded-xl animate-pulse">
+          <div className="mb-4 p-3 bg-sky-50 border border-sky-100 text-sky-600 text-xs font-bold rounded-xl whitespace-pre-wrap">
             {error}
-          </div>
-        )}
-
-        {resetSent && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-100 text-green-700 text-xs font-bold rounded-xl whitespace-pre-wrap">
-            {lang === 'en'
-              ? '✅ Reset link sent! Please check your email inbox and spam folder.'
-              : '✅ மீட்டமைப்பு இணைப்பு அனுப்பப்பட்டது! உங்கள் மின்னஞ்சல் பெட்டியைச் சரிபார்க்கவும்.'}
           </div>
         )}
 
@@ -87,12 +96,28 @@ const Login: React.FC = () => {
             <input
               type="email"
               required
+              disabled={resetSent}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 transition-all text-sm"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 transition-all text-sm disabled:opacity-50"
               placeholder="name@example.com"
             />
           </div>
+
+          {forgotPassword && resetSent && (
+            <div>
+              <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">{t.newPassword}</label>
+              <input
+                type="password"
+                required
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 transition-all text-sm"
+                placeholder="••••••••"
+                autoFocus
+              />
+            </div>
+          )}
 
           {!forgotPassword && (
             <div>
@@ -122,7 +147,7 @@ const Login: React.FC = () => {
             disabled={loading}
             className="w-full bg-sky-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-sky-200 hover:bg-sky-700 active:scale-[0.98] transition-all mt-4 disabled:opacity-50"
           >
-            {loading ? '...' : (forgotPassword ? (lang === 'en' ? 'Send Reset Link' : 'இணைப்பை அனுப்பு') : t.login)}
+            {loading ? '...' : (forgotPassword ? (resetSent ? t.confirmReset : (lang === 'en' ? 'Send Reset Link' : 'இணைப்பை அனுப்பு')) : t.login)}
           </button>
 
           {forgotPassword && (

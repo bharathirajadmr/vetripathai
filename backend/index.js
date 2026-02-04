@@ -88,7 +88,11 @@ app.post('/api/extract-syllabus', async (req, res) => {
         // Increase context window for syllabus
         const contextText = text.length > 50000 ? text.substring(0, 50000) : text;
         const prompt = `Extract TNPSC Group 1 syllabus from this text into structured JSON. 
-        Format: [{ "subject": "History", "topics": [{ "name": "Topic", "subtopics": ["Sub"] }] }]. 
+        Format: [{ "subject": "History", "topics": [{ "name": "Topic", "subtopics": ["Sub"], "weightage": "High" | "Medium" | "Low", "marksWeight": number }] }]. 
+        Weightage Assignment Rules:
+        - High: Core topics (e.g., Unit 8, Unit 9, Polity, INM, Aptitude). marksWeight should be 8-12.
+        - Medium: Current Affairs, Geography, Economy. marksWeight should be 4-7.
+        - Low: General Science core, specific minor units. marksWeight should be 1-3.
         Language: ${lang}. 
         Content: ${contextText}`;
 
@@ -165,13 +169,14 @@ RULES:
 7. Return ONLY valid JSON array.
 8. If NOT Interleaved, "tasks" can be 3-5 general topics.
 
-FORMAT:
+Format:
 {
   "id": "day-1",
   "date": "YYYY-MM-DD",
   "type": "STUDY" | "REVISION" | "MOCK_TEST",
   "tasks": ["Task 1", "Task 2"],
-  "isCompleted": false
+  "isCompleted": false,
+  "weightageInfo": { "Task 1": "High", "Task 2": "Medium" }
 }`;
 
         const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true);
@@ -276,9 +281,55 @@ app.post('/api/parse-schedule', async (req, res) => {
 const fs = require('fs');
 const path = require('path');
 const STATE_DIR = path.join(__dirname, 'data', 'states');
+const SETTINGS_FILE = path.join(__dirname, 'data', 'settings.json');
 
 if (!fs.existsSync(STATE_DIR)) {
     fs.mkdirSync(STATE_DIR, { recursive: true });
+}
+
+// Initialize settings if not exists
+if (!fs.existsSync(SETTINGS_FILE)) {
+    const defaultSettings = {
+        upiId: "officer@gpay",
+        promoCodes: {
+            "VETRI50": 50,
+            "FIRSTOFFICER": 100,
+            "DMR2026": 30
+        },
+        rateCard: [
+            {
+                name: 'Silver',
+                rawPrice: 199,
+                price: '₹199',
+                period: '/month',
+                features: ['Basic Study Plan', 'Weekly Practice Questions', 'Ad-free Experience'],
+                color: 'bg-slate-100 text-slate-700',
+                popular: false
+            },
+            {
+                name: 'Gold Pro',
+                rawPrice: 999,
+                price: '₹999',
+                period: '/year',
+                features: ['AI Syllabus Analysis', 'Unlimited Mock Tests', 'Early Access to Updates'],
+                color: 'bg-sky-600 text-white shadow-xl shadow-sky-200',
+                popular: true
+            },
+            {
+                name: 'Free Trial',
+                rawPrice: 0,
+                price: '₹0',
+                period: '/7 days',
+                features: ['Trial Study Plan', '1 Mock Test', 'Content Extraction'],
+                color: 'bg-gray-50 text-gray-500',
+                popular: false
+            }
+        ]
+    };
+    if (!fs.existsSync(path.dirname(SETTINGS_FILE))) {
+        fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
+    }
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2));
 }
 
 app.get('/api/user/state', (req, res) => {
@@ -288,18 +339,22 @@ app.get('/api/user/state', (req, res) => {
     const filePath = path.join(STATE_DIR, `${Buffer.from(email).toString('base64')}.json`);
     if (fs.existsSync(filePath)) {
         const data = fs.readFileSync(filePath, 'utf8');
-        res.json({ success: true, data: JSON.parse(data) });
+        const json = JSON.parse(data);
+        // Handle both old format (pure state) and new format (wrapped object)
+        const state = json.state || json;
+        res.json({ success: true, data: state });
     } else {
         res.json({ success: true, data: null });
     }
 });
 
 app.post('/api/user/state', (req, res) => {
-    const { email, state } = req.body;
+    const { email, state, user } = req.body;
     if (!email || !state) return res.status(400).json({ error: 'Email and state required' });
 
     const filePath = path.join(STATE_DIR, `${Buffer.from(email).toString('base64')}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(state), 'utf8');
+    const dataToSave = user ? { state, user } : state;
+    fs.writeFileSync(filePath, JSON.stringify(dataToSave), 'utf8');
     res.json({ success: true });
 });
 
@@ -311,6 +366,71 @@ app.get('/api/syllabus/:id', (req, res) => {
         res.json({ success: true, data });
     } else {
         res.status(404).json({ success: false, error: 'Syllabus not found' });
+    }
+});
+
+app.post('/api/admin/upload-syllabus', (req, res) => {
+    try {
+        const { id, content } = req.body;
+        const SYLLABUS_DIR = path.join(__dirname, 'data', 'syllabuses');
+        if (!fs.existsSync(SYLLABUS_DIR)) fs.mkdirSync(SYLLABUS_DIR, { recursive: true });
+        fs.writeFileSync(path.join(SYLLABUS_DIR, `${id}.txt`), content, 'utf8');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get('/api/admin/settings', (req, res) => {
+    try {
+        const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
+        res.json({ success: true, data: JSON.parse(data) });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post('/api/admin/settings', (req, res) => {
+    try {
+        const settings = req.body;
+        fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get('/api/admin/subscribers', (req, res) => {
+    try {
+        const files = fs.readdirSync(STATE_DIR);
+        const users = files.map(file => {
+            try {
+                const data = fs.readFileSync(path.join(STATE_DIR, file), 'utf8');
+                const json = JSON.parse(data);
+
+                // If we have the new format {state, user}
+                if (json.user && json.user.email) return json.user;
+
+                // Legacy format: just state. Extract UserConfig and try to match email
+                const state = json.state || json;
+                const emailBase64 = file.replace('.json', '');
+                let email = 'Unknown';
+                try {
+                    email = Buffer.from(emailBase64, 'base64').toString('utf8');
+                } catch (e) { }
+
+                return {
+                    fullName: (state.user && state.user.examName) ? `Candidate (${state.user.examName})` : 'Anonymous Aspirant',
+                    email: email,
+                    mobile: 'Not Provided',
+                    subscriptionStatus: 'trial',
+                    subscriptionExpiry: new Date().toISOString()
+                };
+            } catch (e) { return null; }
+        }).filter(u => u);
+        res.json({ success: true, data: users });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
     }
 });
 
@@ -356,5 +476,5 @@ if (RENDER_URL) {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`[Ready] VetriPathai Backend running on port ${PORT}`);
+    console.log(`[Ready] Vetri Pathai Backend running on port ${PORT}`);
 });

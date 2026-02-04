@@ -1,0 +1,49 @@
+{
+    "upiId": "officer@gpay",
+    "promoCodes": {
+        "VETRI50": 50,
+        "FIRSTOFFICER": 100,
+        "DMR2026": 30
+    },
+    "rateCard": [
+        {
+            "name": "Silver",
+            "rawPrice": 199,
+            "price": "₹199",
+            "period": "/month",
+            "features": [
+                "Basic Study Plan",
+                "Weekly Practice Questions",
+                "Ad-free Experience"
+            ],
+            "color": "bg-slate-100 text-slate-700",
+            "popular": false
+        },
+        {
+            "name": "Gold Pro",
+            "rawPrice": 999,
+            "price": "₹999",
+            "period": "/year",
+            "features": [
+                "AI Syllabus Analysis",
+                "Unlimited Mock Tests",
+                "Early Access to Updates"
+            ],
+            "color": "bg-sky-600 text-white shadow-xl shadow-sky-200",
+            "popular": true
+        },
+        {
+            "name": "Free Trial",
+            "rawPrice": 0,
+            "price": "₹0",
+            "period": "/7 days",
+            "features": [
+                "Trial Study Plan",
+                "1 Mock Test",
+                "Content Extraction"
+            ],
+            "color": "bg-gray-50 text-gray-500",
+            "popular": false
+        }
+    ]
+}

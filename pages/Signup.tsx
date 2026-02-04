@@ -37,8 +37,8 @@ const Signup: React.FC = () => {
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 border border-sky-100">
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center space-x-2">
-            <img src="/logo.png" alt="VetriPathai" className="h-10 w-auto rounded-lg shadow-sm" />
-            <h1 className="text-2xl font-black text-sky-900 tracking-tight">VetriPathai</h1>
+            <img src="/logo.png" alt="Vetri Pathai" className="h-10 w-auto rounded-lg shadow-sm" />
+            <h1 className="text-2xl font-black text-sky-900 tracking-tight">Vetri Pathai</h1>
           </div>
           <select
             value={lang}

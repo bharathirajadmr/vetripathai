@@ -1,4 +1,5 @@
 import { AppState, User } from "../types";
+import { API_URL } from "../constants";
 
 const APP_VERSION = "v1";
 const STORAGE_KEY_PREFIX = `tnpsc_planner_${APP_VERSION}`;
@@ -9,9 +10,9 @@ export function getStorageKey(email: string) {
   return `${STORAGE_KEY_PREFIX}_${email}`;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+export async function saveState(state: AppState, email?: string, user?: User) {
+  if (!state) return;
 
-export async function saveState(state: AppState, email?: string) {
   if (!email) {
     localStorage.setItem(STORAGE_KEY_PREFIX, JSON.stringify(state));
     return;
@@ -25,7 +26,7 @@ export async function saveState(state: AppState, email?: string) {
     await fetch(`${API_URL}/api/user/state`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, state })
+      body: JSON.stringify({ email, state, user })
     });
   } catch (e) {
     console.error("Backend sync failed", e);
