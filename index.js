@@ -30,45 +30,54 @@ function cleanAndParseJSON(text) {
 // Helper for AI generation with JSON schema Support
 async function generateAIResponse(modelName, prompt, schema = null, search = false) {
     console.log(`[AI Request] Model: ${modelName}, Search: ${search}`);
-    const model = genAI.getGenerativeModel({
-        model: modelName,
-        tools: search ? [{ googleSearch: {} }] : undefined,
-        safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-        ]
-    });
+    try {
+        const model = genAI.getGenerativeModel({
+            model: modelName,
+            tools: search ? [{ googleSearch: {} }] : undefined,
+            safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+            ]
+        });
 
-    const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: (schema && !search) ? {
-            responseMimeType: "application/json",
-            temperature: 0.2
-        } : {
-            temperature: search ? 0.4 : 0.7
+        const result = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: (schema && !search) ? {
+                responseMimeType: "application/json",
+                temperature: 0.2
+            } : {
+                temperature: search ? 0.4 : 0.7
+            }
+        });
+
+        const response = result.response;
+        const text = response.text();
+        console.log(`[AI Response] Length: ${text.length} chars`);
+
+        // Log a snippet for debugging parse errors
+        if (schema) {
+            console.log(`[AI JSON Snippet] ${text.substring(0, 100)}...`);
         }
-    });
 
-    const response = result.response;
-    const text = response.text();
-    console.log(`[AI Response] Length: ${text.length} chars`);
+        let sources = [];
+        if (search) {
+            const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+            sources = chunks
+                .filter((g) => g.web)
+                .map((g) => ({ uri: g.web.uri, title: g.web.title }));
+        }
 
-    // Log a snippet for debugging parse errors
-    if (schema) {
-        console.log(`[AI JSON Snippet] ${text.substring(0, 100)}...`);
+        return { text, sources };
+    } catch (error) {
+        // Handle Rate Limit (429) fallback
+        if ((error.message.includes('429') || error.message.includes('Resource exhausted')) && modelName === 'gemini-2.0-flash') {
+            console.warn(`[Fallback] 429 Rate Limit hit for 2.0-flash. Retrying with 1.5-flash...`);
+            return generateAIResponse('gemini-1.5-flash', prompt, schema, search);
+        }
+        throw error;
     }
-
-    let sources = [];
-    if (search) {
-        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-        sources = chunks
-            .filter((g) => g.web)
-            .map((g) => ({ uri: g.web.uri, title: g.web.title }));
-    }
-
-    return { text, sources };
 }
 
 // Routes
@@ -331,6 +340,19 @@ app.post('/api/daily-summary', async (req, res) => {
 });
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+// Self-ping to keep Render awake
+const https = require('https');
+const RENDER_URL = process.env.RENDER_EXTERNAL_URL;
+if (RENDER_URL) {
+    setInterval(() => {
+        https.get(`${RENDER_URL}/health`, (res) => {
+            console.log(`[Self-Ping] Status: ${res.statusCode}`);
+        }).on('error', (err) => {
+            console.error('[Self-Ping] Error:', err.message);
+        });
+    }, 14 * 60 * 1000); // 14 minutes
+}
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
