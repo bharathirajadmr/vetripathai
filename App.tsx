@@ -22,6 +22,7 @@ const MainApp: React.FC = () => {
   const { currentUser } = useAuth();
   const [state, setState] = useState<AppState>(loadState(currentUser?.email));
   const [loading, setLoading] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [lang, setLang] = useState<Language>(state.user?.language || 'en');
   const [theme, setTheme] = useState<'light' | 'dark'>(state.user?.theme || 'light');
@@ -43,19 +44,27 @@ const MainApp: React.FC = () => {
   useEffect(() => {
     const loadInitialState = async () => {
       if (currentUser?.email) {
+        console.log(`[Sync] Attempting to sync state for ${currentUser.email}`);
         const { syncStateFromBackend } = await import('./services/storage.ts');
         const backendState = await syncStateFromBackend(currentUser.email);
-        if (backendState) {
+
+        // Only use backend state if it's not empty and contains at least a user or syllabus
+        if (backendState && (backendState.user || backendState.syllabus || (backendState.schedule && backendState.schedule.length > 0))) {
+          console.log("[Sync] Applying state from backend");
           setState(backendState);
           setLang(backendState.user?.language || 'en');
           setTheme(backendState.user?.theme || 'light');
+          setIsHydrated(true);
           return;
+        } else {
+          console.log("[Sync] Backend state empty or invalid, falling back to local storage");
         }
       }
       const loadedState = loadState(currentUser?.email);
       setState(loadedState);
       setLang(loadedState.user?.language || 'en');
       setTheme(loadedState.user?.theme || 'light');
+      setIsHydrated(true);
     };
 
     loadInitialState();
@@ -68,12 +77,19 @@ const MainApp: React.FC = () => {
         setState(prev => ({ ...prev, motivation: quote }));
       }).catch(err => console.error("Motivation fetch failed", err));
     }
+
+    // Auto-fetch Current Affairs on load
+    if (!state.currentAffairs || state.currentAffairs.length === 0) {
+      handleFetchCA();
+    }
   }, [lang]);
 
   // Save state when state or user changes
   useEffect(() => {
-    saveState(state, currentUser?.email, currentUser || undefined);
-  }, [state, currentUser]);
+    if (isHydrated) {
+      saveState(state, currentUser?.email, currentUser || undefined);
+    }
+  }, [state, currentUser, isHydrated]);
 
   const handleFetchCA = async () => {
     setLoading(true);
@@ -88,11 +104,17 @@ const MainApp: React.FC = () => {
   };
 
   const handleSetupComplete = (config: UserConfig, syllabus: SyllabusItem[], schedule: any[]) => {
+    // Ensure unique IDs
+    const processedSchedule = (schedule || []).map(day => ({
+      ...day,
+      id: day.id.includes('day-') && day.id.length < 10 ? `day-${day.date}` : day.id
+    }));
+
     setState(prev => ({
       ...prev,
       user: config,
       syllabus: syllabus,
-      schedule: schedule,
+      schedule: processedSchedule,
       setupMode: undefined
     }));
     setLang(config.language);
@@ -177,59 +199,67 @@ const MainApp: React.FC = () => {
     });
   };
 
-  const handleRegenerateSchedule = async () => {
-    if (!state.syllabus || !state.user) {
-      setState(prev => ({ ...prev, setupMode: 'ai' }));
-      return;
-    }
+  const handleOpenSetup = () => {
+    setState(prev => ({ ...prev, setupMode: 'ai' }));
+  };
+
+  const handleContinueSchedule = async () => {
+    if (!state.user || !state.syllabus) return;
 
     setLoading(true);
     try {
-      // Extract completed and missed topics from current schedule
+      // Extract progress
       const completedTopics: string[] = [];
       const missedTopics: string[] = [];
       let lastDate = '';
 
       state.schedule?.forEach(day => {
         if (day.date > lastDate) lastDate = day.date;
-
-        day.tasks.forEach((task, idx) => {
-          const isCompleted = day.completedTasks?.includes(task);
-          if (isCompleted) {
-            completedTopics.push(task);
-          } else if (new Date(day.date) < new Date()) {
-            // Past date but not completed = missed
-            missedTopics.push(task);
-          }
+        day.tasks.forEach(task => {
+          if (day.completedTasks?.includes(task)) completedTopics.push(task);
+          else if (new Date(day.date) < new Date()) missedTopics.push(task);
         });
       });
 
-      const progressData = {
-        completedTopics,
-        missedTopics,
-        hardTopics: state.hardTopics || [],
-        lastGeneratedDate: lastDate
-      };
-
-      const newSchedule = await generateSchedule(
+      const nextSchedule = await generateSchedule(
         state.syllabus,
         state.user,
-        '', // questionPapersContent
-        progressData
+        '',
+        { completedTopics, missedTopics, hardTopics: state.hardTopics || [], lastGeneratedDate: lastDate }
       );
 
-      // Append new schedule to existing
+      // Ensure unique IDs
+      const processed = nextSchedule.map(day => ({
+        ...day,
+        id: day.id.includes('day-') && day.id.length < 10 ? `day-${day.date}` : day.id
+      }));
+
       setState(prev => ({
         ...prev,
-        schedule: [...(prev.schedule || []), ...newSchedule]
+        schedule: [...(prev.schedule || []), ...processed]
       }));
     } catch (error) {
-      console.error('Failed to regenerate schedule', error);
-      alert(lang === 'en' ? 'Failed to generate next period. Please try again.' : 'அடுத்த காலத்தை உருவாக்க முடியவில்லை.');
+      console.error("Quick continue failed", error);
+      alert(lang === 'en' ? 'Failed to continue. Try the full regeneration.' : 'தொடர முடியவில்லை. முழுமையாக மீண்டும் உருவாக்கவும்.');
     } finally {
       setLoading(false);
     }
   };
+
+  // Proactive check: If schedule ends within 5 days, and not already loading
+  useEffect(() => {
+    if (!state.schedule || state.schedule.length === 0 || loading) return;
+
+    const lastDay = state.schedule[state.schedule.length - 1];
+    const lastDate = new Date(lastDay.date);
+    const today = new Date();
+    const diffDays = Math.ceil((lastDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays <= 5 && diffDays >= 0) {
+      // We could show a specific notification or just rely on the button in ScheduleView
+      console.log(`[Proactive] Schedule ends in ${diffDays} days. Offering quick continue...`);
+    }
+  }, [state.schedule, loading]);
 
   const t = TRANSLATIONS[lang];
 
@@ -250,14 +280,19 @@ const MainApp: React.FC = () => {
     >
       <div className="space-y-6">
         {state.setupMode === 'ai' ? (
-          <SetupView lang={lang} onComplete={handleSetupComplete} />
+          <SetupView
+            lang={lang}
+            onComplete={handleSetupComplete}
+            initialConfig={state.user}
+            initialSyllabus={state.syllabus}
+          />
         ) : (
           <>
             {activeTab === 'dashboard' && (
               <Dashboard
                 lang={lang}
                 state={state}
-                onRegenerateSchedule={handleRegenerateSchedule}
+                onRegenerateSchedule={handleOpenSetup}
                 loading={loading}
               />
             )}
@@ -269,7 +304,7 @@ const MainApp: React.FC = () => {
                 onToggleTask={handleToggleTask}
                 onMarkHard={handleMarkHard}
                 hardTopics={state.hardTopics}
-                onRegenerateSchedule={handleRegenerateSchedule}
+                onRegenerateSchedule={handleContinueSchedule}
                 loading={loading}
               />
             )}
@@ -295,7 +330,11 @@ const MainApp: React.FC = () => {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div>
                     <h2 className="text-2xl font-black text-gray-900">{t.currentAffairs}</h2>
-                    <p className="text-gray-500 text-sm">{t.weeklyCA}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-gray-500 text-sm">{t.weeklyCA}</p>
+                      <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-black rounded-full uppercase tracking-tighter">Live Updates</span>
+                      <span className="px-2 py-0.5 bg-sky-100 text-sky-700 text-[10px] font-black rounded-full uppercase tracking-tighter">Last 7 Days</span>
+                    </div>
                   </div>
                   <button
                     onClick={handleFetchCA}

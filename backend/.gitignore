@@ -1,25 +1,9 @@
-# Environment variables (IMPORTANT: Never commit this!)
-.env
-.env.local
-.env.production
-
-# Dependencies
 node_modules/
-
-# Logs
-logs
+.env
+data/states/
+data/syllabuses/
+data/current_affairs_db.json
+data/mock_bank.json
+data/quiz_bank.json
+!data/settings.json
 *.log
-npm-debug.log*
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-
-# Temporary files
-*.tmp
-*.temp
-models.txt

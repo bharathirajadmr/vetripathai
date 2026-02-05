@@ -1,8 +1,16 @@
 
 const getBaseUrl = () => {
+  // Priority 1: Environment Variable (Perfect for Production)
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-  const { hostname } = window.location;
-  return `http://${hostname}:5000`;
+
+  // Priority 2: Automatic detection for local development
+  const { hostname, protocol, port } = window.location;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${protocol}//${hostname}:5000`;
+  }
+
+  // Final fallback (production root)
+  return "";
 };
 
 export const API_URL = getBaseUrl().replace(/\/$/, '');

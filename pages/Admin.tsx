@@ -15,6 +15,23 @@ const AdminPage: React.FC = () => {
     const [upiInput, setUpiInput] = useState('');
     const [newSyllabusId, setNewSyllabusId] = useState('');
     const [newSyllabusContent, setNewSyllabusContent] = useState('');
+    const [genStatus, setGenStatus] = useState<any>(null);
+
+    const checkStatus = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/admin/generation-status`);
+            const data = await res.json();
+            if (data.success) setGenStatus(data.data);
+        } catch (e) { console.error(e); }
+    };
+
+    useEffect(() => {
+        checkStatus();
+        const interval = setInterval(() => {
+            if (genStatus?.isProcessing) checkStatus();
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [genStatus?.isProcessing]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -328,30 +345,106 @@ const AdminPage: React.FC = () => {
                 )}
 
                 {activeTab === 'syllabus' && (
-                    <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
-                        <h3 className="font-black text-gray-900 uppercase tracking-tight">Add Exam Syllabus</h3>
-                        <div className="space-y-4">
-                            <input
-                                type="text"
-                                placeholder="Syllabus ID (e.g. tnpsc-group-2)"
-                                value={newSyllabusId}
-                                onChange={(e) => setNewSyllabusId(e.target.value)}
-                                className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 font-bold outline-none"
-                            />
-                            <textarea
-                                placeholder="Paste full syllabus text content here..."
-                                rows={10}
-                                value={newSyllabusContent}
-                                onChange={(e) => setNewSyllabusContent(e.target.value)}
-                                className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 font-bold outline-none resize-none"
-                            ></textarea>
-                            <button
-                                onClick={handleUploadSyllabus}
-                                disabled={saveLoading || !newSyllabusId || !newSyllabusContent}
-                                className="w-full py-4 bg-sky-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-black disabled:opacity-50 transition-all font-outfit"
-                            >
-                                {saveLoading ? "Uploading..." : "Publish Syllabus"}
-                            </button>
+                    <div className="space-y-8">
+                        <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
+                            <h3 className="font-black text-gray-900 uppercase tracking-tight">Add Exam Syllabus</h3>
+                            <div className="space-y-4">
+                                <input
+                                    type="text"
+                                    placeholder="Syllabus ID (e.g. tnpsc-group-2)"
+                                    value={newSyllabusId}
+                                    onChange={(e) => setNewSyllabusId(e.target.value)}
+                                    className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 font-bold outline-none"
+                                />
+                                <textarea
+                                    placeholder="Paste full syllabus text content here..."
+                                    rows={10}
+                                    value={newSyllabusContent}
+                                    onChange={(e) => setNewSyllabusContent(e.target.value)}
+                                    className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 font-bold outline-none resize-none"
+                                ></textarea>
+                                <button
+                                    onClick={handleUploadSyllabus}
+                                    disabled={saveLoading || !newSyllabusId || !newSyllabusContent}
+                                    className="w-full py-4 bg-sky-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-black disabled:opacity-50 transition-all font-outfit"
+                                >
+                                    {saveLoading ? "Uploading..." : "Publish Syllabus"}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
+                            <div className="flex justify-between items-center">
+                                <h3 className="font-black text-gray-900 uppercase tracking-tight">AI Question Bank Factory</h3>
+                                {genStatus?.isProcessing && (
+                                    <span className="flex items-center text-[10px] font-black text-sky-600 bg-sky-50 px-3 py-1 rounded-full animate-pulse uppercase tracking-widest">
+                                        ⚡ Processing: {genStatus.currentTopic}
+                                    </span>
+                                )}
+                            </div>
+
+                            <p className="text-gray-500 text-xs font-medium leading-relaxed">
+                                Enter a published Syllabus ID to automatically generate a complete question bank.
+                                <span className="text-amber-600 font-bold ml-1">Note: Generation happens slowly (1 topic/15s) to stay within API limits.</span>
+                            </p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-4">
+                                    <input
+                                        type="text"
+                                        placeholder="Target Syllabus ID"
+                                        className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 font-bold outline-none"
+                                        id="genSyllabusId"
+                                    />
+                                    <button
+                                        onClick={async () => {
+                                            const id = (document.getElementById('genSyllabusId') as HTMLInputElement).value;
+                                            if (!id) return alert("Enter Syllabus ID");
+                                            setSaveLoading(true);
+                                            try {
+                                                const res = await fetch(`${API_URL}/api/admin/start-generation`, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ id })
+                                                });
+                                                const data = await res.json();
+                                                if (data.success) {
+                                                    alert("Generation started in background!");
+                                                    checkStatus();
+                                                } else {
+                                                    alert(data.error);
+                                                }
+                                            } catch (e) {
+                                                alert("Connection failed");
+                                            } finally {
+                                                setSaveLoading(false);
+                                            }
+                                        }}
+                                        disabled={saveLoading || genStatus?.isProcessing}
+                                        className="w-full py-4 bg-sky-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-sky-700 disabled:opacity-50 transition-all shadow-lg shadow-sky-100"
+                                    >
+                                        {genStatus?.isProcessing ? "Factory Running..." : "Start Question Generation"}
+                                    </button>
+                                </div>
+
+                                {genStatus && (
+                                    <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex flex-col justify-center">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-[10px] font-black text-gray-400 uppercase">Progress Status</span>
+                                            <span className="text-[10px] font-black text-sky-600 uppercase">{genStatus.completed}/{genStatus.total} Topics Done</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
+                                            <div
+                                                className="bg-sky-500 h-full transition-all duration-1000"
+                                                style={{ width: `${(genStatus.completed / genStatus.total) * 100 || 0}%` }}
+                                            ></div>
+                                        </div>
+                                        <div className="mt-4 text-[10px] font-bold text-gray-500">
+                                            {genStatus.isProcessing ? "Queue active. Auto-saving results..." : "Queue standing by."}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}

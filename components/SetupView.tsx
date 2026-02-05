@@ -9,13 +9,15 @@ import { extractSyllabus, generateSchedule } from '../services/gemini';
 interface SetupViewProps {
     lang: Language;
     onComplete: (config: UserConfig, syllabus: SyllabusItem[], schedule: any[]) => void;
+    initialConfig?: UserConfig | null;
+    initialSyllabus?: SyllabusItem[] | null;
 }
 
-const SetupView: React.FC<SetupViewProps> = ({ lang, onComplete }) => {
+const SetupView: React.FC<SetupViewProps> = ({ lang, onComplete, initialConfig, initialSyllabus }) => {
     const t = TRANSLATIONS[lang];
     const [loading, setLoading] = useState(false);
     const [loadingStatus, setLoadingStatus] = useState('');
-    const [config, setConfig] = useState<UserConfig>({
+    const [config, setConfig] = useState<UserConfig>(initialConfig || {
         examName: 'TNPSC Group 1',
         examDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         startDate: new Date().toISOString().split('T')[0],
@@ -26,7 +28,7 @@ const SetupView: React.FC<SetupViewProps> = ({ lang, onComplete }) => {
     });
     const [syllabusFile, setSyllabusFile] = useState<File | null>(null);
     const [syllabusText, setSyllabusText] = useState('');
-    const [syllabusMode, setSyllabusMode] = useState<'preset' | 'file' | 'text'>('preset');
+    const [syllabusMode, setSyllabusMode] = useState<'preset' | 'file' | 'text' | 'current'>(initialSyllabus ? 'current' : 'preset');
     const [selectedExamId, setSelectedExamId] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
     const [papersFile, setPapersFile] = useState<File | null>(null);
@@ -49,32 +51,42 @@ const SetupView: React.FC<SetupViewProps> = ({ lang, onComplete }) => {
 
         setLoading(true);
         try {
-            setLoadingStatus(t.extracting || 'Extracting content...');
+            let syllabus: SyllabusItem[] = [];
+            let papersText = "";
 
-            let finalSyllabusText = "";
-            if (syllabusMode === 'file' && syllabusFile) {
-                finalSyllabusText = await extractTextFromPDF(syllabusFile);
-            } else if (syllabusMode === 'text') {
-                finalSyllabusText = syllabusText;
-            } else if (syllabusMode === 'preset') {
-                const response = await fetch(`${API_URL}/api/syllabus/${selectedExamId}`);
-                const result = await response.json();
-                if (result.success) {
-                    finalSyllabusText = result.data;
-                } else {
-                    throw new Error(result.error || "Failed to load syllabus");
+            if (syllabusMode === 'current' && initialSyllabus) {
+                syllabus = initialSyllabus;
+            } else {
+                setLoadingStatus(t.extracting || 'Extracting content...');
+
+                let finalSyllabusText = "";
+                if (syllabusMode === 'file' && syllabusFile) {
+                    finalSyllabusText = await extractTextFromPDF(syllabusFile);
+                } else if (syllabusMode === 'text') {
+                    finalSyllabusText = syllabusText;
+                } else if (syllabusMode === 'preset') {
+                    const response = await fetch(`${API_URL}/api/syllabus/${selectedExamId}`);
+                    const result = await response.json();
+                    if (result.success) {
+                        finalSyllabusText = result.data;
+                    } else {
+                        throw new Error(result.error || "Failed to load syllabus");
+                    }
                 }
+
+                setLoadingStatus(lang === 'en' ? 'AI is analyzing syllabus...' : 'AI பாடத்திட்டத்தை ஆய்வு செய்கிறது...');
+                syllabus = await extractSyllabus(finalSyllabusText, lang);
             }
 
-            let papersText = "";
             if (papersFile) {
                 papersText = await extractTextFromPDF(papersFile);
             }
 
-            setLoadingStatus(lang === 'en' ? 'AI is analyzing syllabus...' : 'AI பாடத்திட்டத்தை ஆய்வு செய்கிறது...');
-            const syllabus = await extractSyllabus(finalSyllabusText, lang);
-
             setLoadingStatus(lang === 'en' ? 'Generating your personalized plan...' : 'உங்கள் தனிப்பயன் திட்டத்தை உருவாக்குகிறது...');
+
+            // For regeneration, we might want to pass progress data. 
+            // But if the user wants to "ask from beginning", they might want to overwrite.
+            // Let's check if they have a schedule and provide that as context.
             const schedule = await generateSchedule(syllabus, config, papersText);
 
             onComplete(config, syllabus, schedule);
@@ -173,6 +185,14 @@ const SetupView: React.FC<SetupViewProps> = ({ lang, onComplete }) => {
                         <div className="flex justify-between items-center mb-4">
                             <label className="block text-sm font-black text-gray-700 uppercase tracking-wider">{t.syllabus}</label>
                             <div className="flex bg-gray-100 p-1 rounded-lg gap-1">
+                                {initialSyllabus && (
+                                    <button
+                                        onClick={() => setSyllabusMode('current')}
+                                        className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${syllabusMode === 'current' ? 'bg-white text-sky-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        CURRENT
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => setSyllabusMode('preset')}
                                     className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${syllabusMode === 'preset' ? 'bg-white text-sky-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
@@ -194,7 +214,13 @@ const SetupView: React.FC<SetupViewProps> = ({ lang, onComplete }) => {
                             </div>
                         </div>
 
-                        {syllabusMode === 'preset' ? (
+                        {syllabusMode === 'current' ? (
+                            <div className="bg-sky-50 p-4 rounded-xl border border-sky-100 text-center">
+                                <span className="text-2xl mb-2 block">📋</span>
+                                <p className="text-xs font-bold text-sky-700">Using currently active syllabus</p>
+                                <p className="text-[10px] text-sky-500 mt-1">Found {initialSyllabus?.length} subjects from your previous plan.</p>
+                            </div>
+                        ) : syllabusMode === 'preset' ? (
                             <div className="space-y-4">
                                 <div className="relative">
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>

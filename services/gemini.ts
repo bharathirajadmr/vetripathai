@@ -42,6 +42,7 @@ export async function generateSchedule(
   progressData?: {
     completedTopics: string[];
     missedTopics: string[];
+    hardTopics: string[];
     lastGeneratedDate: string;
   }
 ): Promise<StudyDay[]> {

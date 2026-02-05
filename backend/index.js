@@ -5,7 +5,10 @@ const dotenv = require('dotenv');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const fs = require('fs');
 const path = require('path');
+const cron = require('node-cron');
 const QUIZ_BANK_PATH = path.join(__dirname, 'data', 'quiz_bank.json');
+const CA_DB_PATH = path.join(__dirname, 'data', 'current_affairs_db.json');
+const MOCK_BANK_PATH = path.join(__dirname, 'data', 'mock_bank.json');
 
 dotenv.config();
 
@@ -33,9 +36,26 @@ const GENERIC_TNPSC_QUIZ = [
 // Helper to clean and parse JSON from AI response
 function cleanAndParseJSON(text) {
     try {
-        // Remove markdown code blocks if present
-        const cleaned = text.replace(/```json|```/g, '').trim();
-        return JSON.parse(cleaned);
+        // 1. First try simple markdown block removal
+        let cleaned = text.replace(/```json|```/g, '').trim();
+        try {
+            return JSON.parse(cleaned);
+        } catch (e) {
+            // 2. If that fails, try to find the first '{' or '[' and last '}' or ']'
+            const firstBrace = text.indexOf('{');
+            const firstBracket = text.indexOf('[');
+            const start = (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) ? firstBrace : firstBracket;
+
+            const lastBrace = text.lastIndexOf('}');
+            const lastBracket = text.lastIndexOf(']');
+            const end = (lastBrace > lastBracket) ? lastBrace : lastBracket;
+
+            if (start !== -1 && end !== -1 && end > start) {
+                cleaned = text.substring(start, end + 1);
+                return JSON.parse(cleaned);
+            }
+            throw e; // Rethrow if no JSON structure found
+        }
     } catch (e) {
         console.error("JSON Parse Error. First 500 chars:", text.substring(0, 500));
         console.error("Parse error details:", e.message);
@@ -149,17 +169,32 @@ app.post('/api/generate-schedule', async (req, res) => {
     try {
         const { config, syllabus, questionPapersContent, lang, progressData } = req.body;
 
+        if (!config || !syllabus) {
+            console.warn("[WARN] Missing config or syllabus in request");
+            return res.status(400).json({ success: false, error: "Missing configuration or syllabus" });
+        }
+
         const today = new Date();
         const examDate = new Date(config.examDate);
         const daysUntilExam = Math.ceil((examDate - today) / (1000 * 60 * 60 * 24));
 
         const lastGeneratedDate = progressData?.lastGeneratedDate;
-        const startDate = (lastGeneratedDate && !isNaN(new Date(lastGeneratedDate).getTime()))
-            ? new Date(new Date(lastGeneratedDate).getTime() + 86400000)
-            : today;
+        let startDate;
+        try {
+            startDate = (lastGeneratedDate && !isNaN(new Date(lastGeneratedDate).getTime()))
+                ? new Date(new Date(lastGeneratedDate).getTime() + 86400000)
+                : today;
+        } catch (e) {
+            startDate = today;
+        }
 
         const periodDays = 30;
         const endDate = new Date(startDate.getTime() + (periodDays * 86400000));
+
+        const startStr = startDate instanceof Date && !isNaN(startDate) ? startDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+        const endStr = endDate instanceof Date && !isNaN(endDate) ? endDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+
+        console.log(`[Schedule Gen] Exam: ${config.examDate}, Days Left: ${daysUntilExam}, Period: ${startStr} to ${endStr}`);
 
         const completedTopics = progressData?.completedTopics || [];
         const missedTopics = progressData?.missedTopics || [];
@@ -183,8 +218,8 @@ app.post('/api/generate-schedule', async (req, res) => {
 
         const prompt = `As a TNPSC Expert, generate a 30-day Study Plan.
         
-START DATE: ${startDate.toISOString().split('T')[0]}
-END DATE: ${endDate.toISOString().split('T')[0]}
+START DATE: ${startStr}
+END DATE: ${endStr}
 EXAM DATE: ${config.examDate} (${daysUntilExam} days remaining)
 STUDY HOURS/DAY: ${config.studyHoursPerDay}
 TECHNIQUES: ${config.preferredMethods?.join(', ')}
@@ -196,7 +231,7 @@ ${progressContext}
 ${intensityNote}
 
 RULES:
-1. Generate EXACTLY 30 days starting from ${startDate.toISOString().split('T')[0]}.
+1. Generate EXACTLY 30 days starting from ${startStr}.
 2. If techniques include 'Interleaved Study', EACH daily "tasks" array MUST have exactly 3 items: 
    - Slot 1: A Core subject topic (Polity/History/Unit 8) - ~2 hrs.
    - Slot 2: Aptitude & Mental Ability topic (Unit 10) - ~1 hr.
@@ -211,7 +246,7 @@ RULES:
 
 Format:
 {
-  "id": "day-1",
+  "id": "day-YYYY-MM-DD",
   "date": "YYYY-MM-DD",
   "type": "STUDY" | "REVISION" | "MOCK_TEST",
   "tasks": ["Task 1", "Task 2"],
@@ -220,42 +255,93 @@ Format:
 }`;
 
         const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true);
-        res.json({ success: true, data: cleanAndParseJSON(responseText) });
+        const parsedData = cleanAndParseJSON(responseText);
+        console.log(`[Schedule Gen] Success! Generated ${parsedData.length} days. Sending response...`);
+        res.json({ success: true, data: parsedData });
     } catch (error) {
-        console.error("[ERROR]", error);
+        console.error("[ERROR] Generate Schedule Failed:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-app.get('/api/current-affairs', async (req, res) => {
-    console.log("-> /api/current-affairs");
+// Helper to sync Current Affairs
+async function syncCurrentAffairs(lang = 'en') {
+    console.log(`[CA Sync] Syncing Current Affairs for ${lang}...`);
     try {
-        const { lang } = req.query;
-        const prompt = `Find 5-6 latest TNPSC current affairs from the past 7 days.
+        const prompt = `Find 6-8 latest TNPSC current affairs for today (${new Date().toISOString().split('T')[0]}).
         Categories: STATE (Tamil Nadu), NATIONAL (India), ECONOMY, SCIENCE, INTERNATIONAL.
         Relevance: High (Core syllabus), Medium (General awareness), Low (FYI).
         Return EXCLUSIVELY a JSON array of objects with keys: title, summary, category, date, relevance.
-        DO NOT include any markdown formatting or code blocks, just the raw JSON text.
         Language: ${lang === 'ta' ? 'Tamil' : 'English'}.
-        Topics should be relevant to competitive exams like TNPSC.`;
+        Ensure dates are in YYYY-MM-DD format.`;
 
         const { text: responseText, sources } = await generateAIResponse("gemini-2.0-flash", prompt, true, true);
         const news = cleanAndParseJSON(responseText);
 
-        // Ensure data consistency
-        const data = news.map((n, idx) => ({
-            id: `ca-${idx}`,
-            title: n.title || n.Name || "Current Event",
-            summary: n.summary || n.Description || n.content || "",
+        let currentDB = { en: [], ta: [] };
+        if (fs.existsSync(CA_DB_PATH)) {
+            currentDB = JSON.parse(fs.readFileSync(CA_DB_PATH, 'utf8'));
+        }
+
+        const formattedNews = news.map((n, idx) => ({
+            id: `ca-${Date.now()}-${idx}`,
+            title: n.title || "Current Event",
+            summary: n.summary || "",
             category: (n.category || "GENERAL").toUpperCase(),
-            relevance: (n.relevance || "Medium").charAt(0).toUpperCase() + (n.relevance || "Medium").slice(1).toLowerCase(),
+            relevance: (n.relevance || "Medium"),
             date: n.date || new Date().toISOString().split('T')[0],
             sources: sources.slice(0, 2)
         }));
 
-        res.json({ success: true, data });
+        // Merge and deduplicate by title
+        const existingTitles = new Set(currentDB[lang].map(item => item.title));
+        const uniqueNews = formattedNews.filter(item => !existingTitles.has(item.title));
+
+        currentDB[lang] = [...uniqueNews, ...currentDB[lang]].slice(0, 100); // Keep last 100
+
+        fs.writeFileSync(CA_DB_PATH, JSON.stringify(currentDB, null, 2));
+        console.log(`[CA Sync] Success! Added ${uniqueNews.length} new items for ${lang}.`);
+        return currentDB[lang];
     } catch (error) {
-        console.error("[ERROR]", error);
+        console.error(`[CA Sync] Failed for ${lang}:`, error.message);
+        return [];
+    }
+}
+
+// Daily Schedule at 8:00 AM
+cron.schedule('0 8 * * *', () => {
+    console.log("[Cron] Running daily Current Affairs sync...");
+    syncCurrentAffairs('en');
+    syncCurrentAffairs('ta');
+});
+
+app.get('/api/current-affairs', async (req, res) => {
+    const { lang = 'en' } = req.query;
+    console.log(`-> GET /api/current-affairs (Lang: ${lang})`);
+
+    try {
+        if (!fs.existsSync(CA_DB_PATH)) {
+            // If DB doesn't exist, do an initial sync
+            await syncCurrentAffairs('en');
+            await syncCurrentAffairs('ta');
+        }
+
+        const db = JSON.parse(fs.readFileSync(CA_DB_PATH, 'utf8'));
+        const items = db[lang] || [];
+
+        // Return last 7 days of data
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const sevenDaysStr = sevenDaysAgo.toISOString().split('T')[0];
+
+        const filtered = items.filter(item => item.date >= sevenDaysStr);
+
+        // If results are thin (e.g. just started), return at least 5 latest
+        const finalData = filtered.length >= 5 ? filtered : items.slice(0, 8);
+
+        res.json({ success: true, data: finalData });
+    } catch (error) {
+        console.error("[ERROR] CA Fetch failed:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -355,21 +441,56 @@ app.get('/api/motivation', async (req, res) => {
 app.post('/api/mock-test', async (req, res) => {
     console.log("-> /api/mock-test");
     try {
-        const { completedTopics, oldPapers, lang } = req.body;
-        const prompt = `As a TNPSC Senior Examiner, generate a formal Mock Test (10 MCQs) based on: ${completedTopics.join(', ')}.
-        INSTRUCTIONS:
-        1. Search the internet for actual TNPSC/UPSC questions related to these topics to ensure credibility.
-        2. Follow the standard exam format (Options A, B, C, D).
-        3. Match the difficulty level of 2024-2025 exams.
+        const { completedTopics, oldPapers, lang, subject = 'General' } = req.body;
+
+        // 1. Check Cache First
+        let mockBank = {};
+        if (fs.existsSync(MOCK_BANK_PATH)) {
+            mockBank = JSON.parse(fs.readFileSync(MOCK_BANK_PATH, 'utf8'));
+        }
+
+        // Cache Key based on topics
+        const cacheKey = `${subject}_${lang}_${Buffer.from((completedTopics || []).sort().join(',')).toString('base64').substring(0, 32)}`;
+
+        if (mockBank[cacheKey]) {
+            console.log(`[Mock Bank] Cache Hit for: ${subject}`);
+            return res.json({ success: true, data: mockBank[cacheKey] });
+        }
+
+        console.log(`[Mock Bank] Cache Miss. Acting as Exam Preparer for: ${subject}`);
+
+        // 2. AI Generation
+        const prompt = `Act as an Expert Exam Question Paper Preparer for TNPSC/Competitive Exams.
+        Your task is to generate 20 high-quality MCQs based on these completed topics: ${completedTopics.join(', ')}.
         
-        Return EXCLUSIVELY a JSON array of objects with {question, options, correctAnswer, explanation}.
-        Language: ${lang === 'ta' ? 'Tamil' : 'English'}. 
-        Context: ${oldPapers?.substring(0, 5000)}.`;
+        GUIDELINES:
+        1. Base the questions on actual Previous Year Question (PYQ) trends.
+        2. Difficulty: Mix of 40% Moderate, 40% High, 20% Very High (Exam level).
+        3. Format: ONE question must be 'Match the following', TWO must be 'Assertion & Reason', and others standard MCQs.
+        4. Questions must be unique and historically/scientifically accurate.
+        
+        CONTEXT (PYQ Data): ${oldPapers?.substring(0, 8000) || "Follow standard 2024-2025 exam patterns."}
+        
+        Return EXCLUSIVELY a JSON array of 20 objects:
+        { "question": "...", "options": ["A", "B", "C", "D"], "correctAnswer": "Letter (A/B/C/D)", "explanation": "..." }
+        
+        Language: ${lang === 'ta' ? 'Tamil' : 'English'}.`;
 
         const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true, true);
-        res.json({ success: true, data: cleanAndParseJSON(responseText) });
+        const questions = cleanAndParseJSON(responseText);
+
+        // 3. Save to Bank
+        mockBank[cacheKey] = questions;
+        try {
+            if (!fs.existsSync(path.dirname(MOCK_BANK_PATH))) fs.mkdirSync(path.dirname(MOCK_BANK_PATH), { recursive: true });
+            fs.writeFileSync(MOCK_BANK_PATH, JSON.stringify(mockBank, null, 2));
+        } catch (err) {
+            console.error("Failed to save to mock bank:", err);
+        }
+
+        res.json({ success: true, data: questions });
     } catch (error) {
-        console.error("[ERROR]", error);
+        console.error("[ERROR] Mock Test Generation Failed:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -445,6 +566,7 @@ app.get('/api/user/state', (req, res) => {
     const email = req.query.email;
     if (!email) return res.status(400).json({ error: 'Email required' });
 
+    console.log(`-> GET /api/user/state (User: ${email})`);
     const filePath = path.join(STATE_DIR, `${Buffer.from(email).toString('base64')}.json`);
     if (fs.existsSync(filePath)) {
         const data = fs.readFileSync(filePath, 'utf8');
@@ -461,10 +583,17 @@ app.post('/api/user/state', (req, res) => {
     const { email, state, user } = req.body;
     if (!email || !state) return res.status(400).json({ error: 'Email and state required' });
 
+    console.log(`-> POST /api/user/state (User: ${email})`);
     const filePath = path.join(STATE_DIR, `${Buffer.from(email).toString('base64')}.json`);
     const dataToSave = user ? { state, user } : state;
-    fs.writeFileSync(filePath, JSON.stringify(dataToSave), 'utf8');
-    res.json({ success: true });
+    try {
+        fs.writeFileSync(filePath, JSON.stringify(dataToSave), 'utf8');
+        console.log(`   [State Saved] Size: ${Math.round(JSON.stringify(dataToSave).length / 1024)} KB`);
+        res.json({ success: true });
+    } catch (e) {
+        console.error(`   [Save Error] ${e.message}`);
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 app.get('/api/syllabus/:id', (req, res) => {
@@ -600,12 +729,111 @@ app.post('/api/daily-summary', async (req, res) => {
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+// AI Question Factory (Background Worker)
+let factoryState = {
+    isProcessing: false,
+    syllabusId: null,
+    queue: [],
+    completed: 0,
+    total: 0,
+    currentTopic: null
+};
+
+app.post('/api/admin/start-generation', async (req, res) => {
+    const { id } = req.body;
+    if (factoryState.isProcessing) return res.status(400).json({ success: false, error: "A generation is already in progress." });
+
+    const filePath = path.join(__dirname, 'data', 'syllabuses', `${id}.txt`);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, error: "Syllabus not found" });
+
+    const text = fs.readFileSync(filePath, 'utf8');
+    console.log(`[Factory] Starting for: ${id}`);
+
+    try {
+        // Step 1: Extract flat list of topics to generate for
+        const extractPrompt = `Extract a flat list of all specific study topics from this syllabus text. 
+        Return ONLY a JSON array of strings. Example: ["Harappan Civilization", "Vedic Age", ...].
+        Syllabus: ${text.substring(0, 5000)}`;
+
+        const { text: responseText } = await generateAIResponse("gemini-2.0-flash", extractPrompt, true);
+        const topics = cleanAndParseJSON(responseText);
+
+        factoryState = {
+            isProcessing: true,
+            syllabusId: id,
+            queue: topics,
+            completed: 0,
+            total: topics.length,
+            currentTopic: null
+        };
+
+        // Start background process
+        processFactoryQueue();
+
+        res.json({ success: true, count: topics.length });
+    } catch (error) {
+        console.error("[Factory Error]", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/admin/generation-status', (req, res) => {
+    res.json({ success: true, data: factoryState });
+});
+
+async function processFactoryQueue() {
+    if (!factoryState.isProcessing || factoryState.queue.length === 0) {
+        console.log("[Factory] Done.");
+        factoryState.isProcessing = false;
+        return;
+    }
+
+    const topic = factoryState.queue.shift();
+    factoryState.currentTopic = topic;
+    console.log(`[Factory] Generating for: ${topic} (${factoryState.completed + 1}/${factoryState.total})`);
+
+    try {
+        // Check if already in bank to save tokens
+        let quizBank = {};
+        if (fs.existsSync(QUIZ_BANK_PATH)) {
+            quizBank = JSON.parse(fs.readFileSync(QUIZ_BANK_PATH, 'utf8'));
+        }
+
+        const cacheKey = `MASTER_${topic.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+
+        if (!quizBank[cacheKey]) {
+            const prompt = `As a Competitive Exam Expert, generate a formal High-Difficulty Quiz (10 MCQs) for the topic: "${topic}".
+            Requirements: 10 MCQs, standard Options (A, B, C, D), Correct Answer, Detailed Explanation.
+            Return EXCLUSIVELY JSON array: [{question, options, correctAnswer, explanation}].`;
+
+            const { text: responseText } = await generateAIResponse("gemini-2.0-flash", prompt, true, true);
+            const questions = cleanAndParseJSON(responseText);
+
+            quizBank[cacheKey] = questions;
+            fs.writeFileSync(QUIZ_BANK_PATH, JSON.stringify(quizBank, null, 2));
+            console.log(`   [Factory] Saved ${questions.length} questions.`);
+        } else {
+            console.log(`   [Factory] Topic already exists in bank. Skipping AI call.`);
+        }
+
+        factoryState.completed++;
+    } catch (e) {
+        console.error(`   [Factory] Failed topic ${topic}:`, e.message);
+        // Put back in queue if it's a transient failure? No, skip for now to avoid loops, or use retry logic.
+    }
+
+    // Wait 20 seconds before next topic to be VERY safe with API limits
+    setTimeout(processFactoryQueue, 20000);
+}
+
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
 // Self-ping to keep Render awake
 const https = require('https');
-const RENDER_URL = process.env.RENDER_EXTERNAL_URL;
-if (RENDER_URL) {
+const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
+if (RENDER_EXTERNAL_URL) {
     setInterval(() => {
-        https.get(`${RENDER_URL}/health`, (res) => {
+        https.get(`${RENDER_EXTERNAL_URL}/health`, (res) => {
             console.log(`[Self-Ping] Status: ${res.statusCode}`);
         }).on('error', (err) => {
             console.error('[Self-Ping] Error:', err.message);
@@ -616,4 +844,6 @@ if (RENDER_URL) {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`[Ready] Vetri Pathai Backend running on port ${PORT}`);
+    syncCurrentAffairs('en');
+    syncCurrentAffairs('ta');
 });
