@@ -16,6 +16,8 @@ import SyllabusView from './components/SyllabusView.tsx';
 import HistoryView from './components/HistoryView.tsx';
 import SubscriptionPage from './pages/Subscription.tsx';
 import AdminPage from './pages/Admin.tsx';
+import AboutPage from './pages/About.tsx';
+import ContactPage from './pages/Contact.tsx';
 import { getMotivationalQuote, generateSchedule, fetchWeeklyCurrentAffairs } from './services/gemini.ts';
 
 const MainApp: React.FC = () => {
@@ -317,6 +319,8 @@ const MainApp: React.FC = () => {
             )}
 
             {activeTab === 'subscription' && <SubscriptionPage lang={lang} />}
+            {activeTab === 'about' && <AboutPage lang={lang} />}
+            {activeTab === 'contact' && <ContactPage lang={lang} />}
 
             {activeTab === 'history' && (
               <HistoryView

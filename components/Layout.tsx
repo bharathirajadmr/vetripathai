@@ -106,7 +106,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-3 group cursor-pointer" onClick={() => setActiveTab('dashboard')}>
             <img src="/logo.png" alt="Vetri Pathai" className="h-10 md:h-12 w-auto rounded-xl shadow-md transition-all group-hover:scale-110 group-hover:rotate-3" />
-            <h1 className="text-xl font-black text-sky-900 dark:text-sky-400 tracking-tight">Vetri Pathai Pro</h1>
+            <h1 className="text-xl font-black text-sky-900 dark:text-sky-400 tracking-tight">Vetri Pathai</h1>
           </div>
           <div className="hidden md:flex ml-4 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 px-3 py-1 rounded-full text-[10px] font-bold items-center space-x-1 border border-orange-200 dark:border-orange-800">
             <span>🔥</span>
@@ -216,18 +216,37 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
 
       <footer className="bg-white dark:bg-slate-900 border-t dark:border-slate-800 py-8 px-4 text-center mt-auto transition-colors">
         <div className="max-w-7xl mx-auto">
-          <p className="text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-4">
-            © {new Date().getFullYear()} Vetri Pathai Pro. Beyond Preparation.
-          </p>
-          <div className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-            <span className="flex items-center">
-              Designed & Developed by <span className="text-sky-600 dark:text-sky-400 ml-2">Mr. Bharathi Raja</span>
-            </span>
+          <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-6 mb-6">
+            <div className="flex items-center space-x-4 md:space-x-6">
+              <button
+                onClick={() => setActiveTab('about')}
+                className={`text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'about' ? 'text-sky-600' : 'text-gray-400 hover:text-sky-600'}`}
+              >
+                {t.about}
+              </button>
+              <button
+                onClick={() => setActiveTab('contact')}
+                className={`text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'contact' ? 'text-sky-600' : 'text-gray-400 hover:text-sky-600'}`}
+              >
+                {t.contact}
+              </button>
+            </div>
+
             <span className="hidden md:block w-1.5 h-1.5 rounded-full bg-gray-200 dark:bg-slate-800" />
-            <span className="flex items-center">
-              Conceptualized by <span className="text-sky-600 dark:text-sky-400 ml-2">Mrs. Aruna Bharathi Raja</span>
-            </span>
+
+            <div className="flex flex-col md:flex-row items-center gap-2 md:gap-6">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                Designed & Developed by <span className="text-sky-600 dark:text-sky-400">Mr. Bharathi Raja</span>
+              </span>
+              <span className="hidden md:block w-1 h-1 rounded-full bg-gray-200 dark:bg-slate-800" />
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                Conceptualized by <span className="text-sky-600 dark:text-sky-400">Mrs. Aruna Bharathi Raja</span>
+              </span>
+            </div>
           </div>
+          <p className="text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-[0.2em]">
+            © {new Date().getFullYear()} Vetri Pathai. Beyond Preparation.
+          </p>
         </div>
       </footer>
     </div >

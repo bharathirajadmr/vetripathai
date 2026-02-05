@@ -210,7 +210,7 @@ const Dashboard: React.FC<DashboardProps> = ({ lang, state, onRegenerateSchedule
                             <img src="/logo.png" alt="Logo" className="w-full h-full object-contain filter drop-shadow-lg" />
                         </div>
                         <h2 className="text-3xl md:text-5xl font-black text-white leading-tight mb-6">
-                            {lang === 'en' ? 'Welcome to Vetri Pathai Pro' : 'வெற்றிப்பாதை ப்ரோவிற்கு உங்களை வரவேற்கிறோம்'}
+                            {lang === 'en' ? 'Welcome to Vetri Pathai' : 'வெற்றிப்பாதைக்கு உங்களை வரவேற்கிறோம்'}
                         </h2>
                         <p className="text-sky-100 text-lg opacity-80 mb-10 leading-relaxed">
                             {lang === 'en'
