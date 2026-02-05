@@ -109,7 +109,7 @@ async function generateAIResponse(modelName, prompt, schema = null, search = fal
     let activeModel = modelName;
 
     if (isRetry && activeModel.includes('flash')) {
-        activeModel = 'gemini-1.5-pro'; // Escalate to most powerful model on failure
+        activeModel = 'gemini-1.5-pro-latest'; // Escalate to most powerful model on failure
         console.log(`[Escalation] Switching to ${activeModel} for reliability.`);
     }
 
@@ -749,7 +749,7 @@ Return ONLY a JSON object with keys:
 
 Language: ${lang === 'ta' ? 'Tamil' : 'English'}.`;
 
-        const { text: responseText } = await generateAIResponse("gemini-1.5-pro", prompt, true); // Use Pro for deep analysis
+        const { text: responseText } = await generateAIResponse("gemini-1.5-pro-latest", prompt, true); // Use Pro for deep analysis
         const report = cleanAndParseJSON(responseText);
         res.json({ success: true, data: { ...report, generatedAt: new Date().toISOString() } });
     } catch (error) {
