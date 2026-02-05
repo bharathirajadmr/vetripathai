@@ -1,39 +1,263 @@
 {
-    "en_indus valley civilization": [
-        {
-            "question": "Which of the following Indus Valley sites is located in India?",
-            "options": [
-                "Harappa",
-                "Mohenjo-daro",
-                "Lothal",
-                "Chanhudaro"
-            ],
-            "correctAnswer": "C",
-            "explanation": "Lothal is located in Gujarat, India, and was an important port city of the Indus Valley Civilization."
-        },
-        {
-            "question": "The Great Bath was found at which Indus Valley site?",
-            "options": [
-                "Harappa",
-                "Mohenjo-daro",
-                "Kalibangan",
-                "Ropar"
-            ],
-            "correctAnswer": "B",
-            "explanation": "The Great Bath, one of the most well-known structures of the Indus Valley Civilization, was discovered at Mohenjo-daro."
-        }
-    ],
-    "en_indian national congress": [
-        {
-            "question": "Who was the first President of the Indian National Congress?",
-            "options": [
-                "Dadabhai Naoroji",
-                "W.C. Bonnerjee",
-                "A.O. Hume",
-                "Badruddin Tyabji"
-            ],
-            "correctAnswer": "B",
-            "explanation": "Womesh Chandra Bonnerjee was the first president of the INC session held in Bombay in 1885."
-        }
-    ]
+  "en_indus valley civilization": [
+    {
+      "question": "Which of the following Indus Valley sites is located in India?",
+      "options": [
+        "Harappa",
+        "Mohenjo-daro",
+        "Lothal",
+        "Chanhudaro"
+      ],
+      "correctAnswer": "C",
+      "explanation": "Lothal is located in Gujarat, India, and was an important port city of the Indus Valley Civilization."
+    },
+    {
+      "question": "The Great Bath was found at which Indus Valley site?",
+      "options": [
+        "Harappa",
+        "Mohenjo-daro",
+        "Kalibangan",
+        "Ropar"
+      ],
+      "correctAnswer": "B",
+      "explanation": "The Great Bath, one of the most well-known structures of the Indus Valley Civilization, was discovered at Mohenjo-daro."
+    }
+  ],
+  "en_indian national congress": [
+    {
+      "question": "Who was the first President of the Indian National Congress?",
+      "options": [
+        "Dadabhai Naoroji",
+        "W.C. Bonnerjee",
+        "A.O. Hume",
+        "Badruddin Tyabji"
+      ],
+      "correctAnswer": "B",
+      "explanation": "Womesh Chandra Bonnerjee was the first president of the INC session held in Bombay in 1885."
+    }
+  ],
+  "en_slot 1: constitution of india": [
+    {
+      "question": "Which of the following best describes the 'Basic Structure' doctrine of the Indian Constitution?",
+      "options": [
+        "A. The fundamental rights enshrined in Part III of the Constitution.",
+        "B. The essential features of the Constitution that cannot be altered by amendments.",
+        "C. The distribution of powers between the Union and the States.",
+        "D. The directive principles of state policy as guidelines for governance."
+      ],
+      "correctAnswer": "B",
+      "explanation": "The Basic Structure doctrine, evolved by the Supreme Court, posits that certain fundamental features of the Constitution are beyond the amending power of the Parliament."
+    },
+    {
+      "question": "The concept of 'procedure established by law' in the Indian Constitution is borrowed from which country?",
+      "options": [
+        "A. USA",
+        "B. UK",
+        "C. Japan",
+        "D. Canada"
+      ],
+      "correctAnswer": "C",
+      "explanation": "The phrase 'procedure established by law' as it appears in Article 21 of the Indian Constitution, is taken from the Constitution of Japan."
+    },
+    {
+      "question": "Which schedule of the Indian Constitution deals with the allocation of seats in the Rajya Sabha to the States and Union Territories?",
+      "options": [
+        "A. Third Schedule",
+        "B. Fourth Schedule",
+        "C. Fifth Schedule",
+        "D. Sixth Schedule"
+      ],
+      "correctAnswer": "B",
+      "explanation": "The Fourth Schedule of the Indian Constitution contains provisions regarding the allocation of seats in the Rajya Sabha for each state and union territory."
+    },
+    {
+      "question": "Which of the following writs can be issued to secure the release of a person who is found to be unlawfully detained?",
+      "options": [
+        "A. Mandamus",
+        "B. Certiorari",
+        "C. Habeas Corpus",
+        "D. Quo Warranto"
+      ],
+      "correctAnswer": "C",
+      "explanation": "The writ of Habeas Corpus is a legal remedy against unlawful detention. It directs the detaining authority to produce the detained person before the court to examine the legality of the detention."
+    },
+    {
+      "question": "Consider the following statements regarding the Finance Commission:\n1. It is a constitutional body.\n2. It recommends the distribution of tax revenues between the Union and the States.\n3. Its recommendations are binding on the government.\nWhich of the statements given above is/are correct?",
+      "options": [
+        "A. 1 and 2 only",
+        "B. 2 and 3 only",
+        "C. 1 and 3 only",
+        "D. 1, 2 and 3"
+      ],
+      "correctAnswer": "A",
+      "explanation": "The Finance Commission is a constitutional body that recommends the distribution of tax revenues between the Union and the States. However, its recommendations are advisory in nature and not binding on the government."
+    },
+    {
+      "question": "Which of the following amendments to the Constitution of India added Fundamental Duties to it?",
+      "options": [
+        "A. 42nd Amendment",
+        "B. 44th Amendment",
+        "C. 86th Amendment",
+        "D. 91st Amendment"
+      ],
+      "correctAnswer": "A",
+      "explanation": "The 42nd Amendment Act of 1976 inserted a new Part IVA into the Constitution, which deals with Fundamental Duties."
+    },
+    {
+      "question": "Which Article of the Indian Constitution empowers the President to promulgate ordinances during the recess of Parliament?",
+      "options": [
+        "A. Article 123",
+        "B. Article 213",
+        "C. Article 352",
+        "D. Article 360"
+      ],
+      "correctAnswer": "A",
+      "explanation": "Article 123 of the Constitution of India grants the President the power to promulgate ordinances when both Houses of Parliament are not in session."
+    },
+    {
+      "question": "The power of the Supreme Court of India to decide disputes between the Centre and the States falls under its:",
+      "options": [
+        "A. Advisory Jurisdiction",
+        "B. Appellate Jurisdiction",
+        "C. Original Jurisdiction",
+        "D. Writ Jurisdiction"
+      ],
+      "correctAnswer": "C",
+      "explanation": "The Supreme Court has Original Jurisdiction in disputes between the Government of India and one or more States; or between the Government of India and any State or States on one side and one or more other States on the other."
+    },
+    {
+      "question": "Which of the following Schedules of the Indian Constitution specifies the powers, authority and responsibilities of Panchayats?",
+      "options": [
+        "A. Ninth Schedule",
+        "B. Tenth Schedule",
+        "C. Eleventh Schedule",
+        "D. Twelfth Schedule"
+      ],
+      "correctAnswer": "C",
+      "explanation": "The Eleventh Schedule of the Constitution deals with the powers, authority, and responsibilities of Panchayats."
+    },
+    {
+      "question": "What is the primary objective of Article 311 of the Indian Constitution?",
+      "options": [
+        "A. To provide reservation in public services.",
+        "B. To protect civil servants against arbitrary dismissal.",
+        "C. To define the powers of the Union Public Service Commission.",
+        "D. To ensure equality of opportunity in matters of public employment."
+      ],
+      "correctAnswer": "B",
+      "explanation": "Article 311 provides safeguards to civil servants against arbitrary dismissal, removal or reduction in rank."
+    }
+  ],
+  "en_slot 1: scientific knowledge and scientific temper": [
+    {
+      "question": "Which of the following best describes 'scientific temper' as envisioned in the Indian Constitution?",
+      "options": [
+        "A. Accepting scientific findings without questioning their societal impact.",
+        "B. Promoting only indigenous technologies and rejecting foreign scientific advancements.",
+        "C. A way of thinking that involves questioning, logic, and a commitment to evidence-based reasoning to understand the world.",
+        "D. Memorizing scientific facts and formulas to excel in examinations."
+      ],
+      "correctAnswer": "C",
+      "explanation": "Scientific temper, as enshrined in Article 51A of the Indian Constitution, emphasizes critical thinking, questioning, and using logic and evidence to understand and improve society."
+    },
+    {
+      "question": "Article 51A of the Indian Constitution emphasizes the fundamental duty to develop scientific temper, humanism, and the spirit of inquiry and reform. Which of the following actions would be LEAST aligned with this duty?",
+      "options": [
+        "A. Supporting evidence-based public health policies.",
+        "B. Critically evaluating information presented in the media.",
+        "C. Unquestioningly accepting traditional practices and beliefs.",
+        "D. Encouraging scientific research and innovation."
+      ],
+      "correctAnswer": "C",
+      "explanation": "Unquestioningly accepting traditional practices contradicts the spirit of inquiry and reform, which are key components of the fundamental duty outlined in Article 51A."
+    },
+    {
+      "question": "Which of the following scenarios exemplifies the application of scientific knowledge to address a societal challenge?",
+      "options": [
+        "A. Following astrological predictions to make important life decisions.",
+        "B. Using traditional remedies without understanding their efficacy.",
+        "C. Developing drought-resistant crops through genetic engineering to improve food security.",
+        "D. Relying solely on intuition to solve complex problems."
+      ],
+      "correctAnswer": "C",
+      "explanation": "Developing drought-resistant crops demonstrates the application of scientific knowledge (genetic engineering) to address a practical problem (food security)."
+    },
+    {
+      "question": "The Scientific Policy Resolution was adopted by the Indian Parliament in which year?",
+      "options": [
+        "A. 1947",
+        "B. 1958",
+        "C. 1962",
+        "D. 1971"
+      ],
+      "correctAnswer": "B",
+      "explanation": "The Indian Parliament adopted the Scientific Policy Resolution in 1958."
+    },
+    {
+      "question": "Which of the following is the MOST effective strategy for promoting scientific temper in a community?",
+      "options": [
+        "A. Enforcing strict adherence to scientific textbooks.",
+        "B. Encouraging rote memorization of scientific facts.",
+        "C. Facilitating open discussions and debates on scientific issues, encouraging critical thinking and questioning.",
+        "D. Discouraging any form of dissent or alternative viewpoints on scientific matters."
+      ],
+      "correctAnswer": "C",
+      "explanation": "Promoting scientific temper involves fostering critical thinking, open discussions, and questioning, rather than enforcing rigid adherence to established knowledge."
+    },
+    {
+      "question": "Consider the following statements regarding the nature of science:\n1. Scientific knowledge is tentative and subject to change.\n2. Scientific methods are universal and applicable in all contexts.\n3. Science is influenced by social and cultural contexts.\nWhich of the above statements is/are correct?",
+      "options": [
+        "A. 1 only",
+        "B. 2 only",
+        "C. 1 and 3 only",
+        "D. 1, 2, and 3"
+      ],
+      "correctAnswer": "C",
+      "explanation": "Scientific knowledge evolves with new evidence, and science is influenced by societal factors. However, there isn't a single 'scientific method' applicable everywhere."
+    },
+    {
+      "question": "Which activity exemplifies 'rote learning' as opposed to 'conceptual learning'?",
+      "options": [
+        "A. Understanding the underlying principles of thermodynamics to design an efficient engine.",
+        "B. Memorizing the periodic table without understanding the properties of elements.",
+        "C. Conducting experiments to test a hypothesis about plant growth.",
+        "D. Applying mathematical concepts to solve real-world problems."
+      ],
+      "correctAnswer": "B",
+      "explanation": "Rote learning involves memorization without understanding, while conceptual learning focuses on understanding the underlying principles."
+    },
+    {
+      "question": "Jawaharlal Nehru articulated the concept of scientific temper in which of his books?",
+      "options": [
+        "A. Glimpses of World History",
+        "B. A Bunch of Old Letters",
+        "C. The Discovery of India",
+        "D. Towards Freedom"
+      ],
+      "correctAnswer": "C",
+      "explanation": "Jawaharlal Nehru articulated the concept of scientific temper in his book 'The Discovery of India'."
+    },
+    {
+      "question": "Which of the following attributes are essential components of scientific temper?",
+      "options": [
+        "A. Open-mindedness and Skepticism",
+        "B. Subjectivity and Acceptance of Authority",
+        "C. Rigidity and Dogmatism",
+        "D. Emotional Reasoning and Intuition"
+      ],
+      "correctAnswer": "A",
+      "explanation": "Open-mindedness and skepticism are crucial for scientific temper, allowing for the questioning of existing knowledge and the acceptance of new evidence."
+    },
+    {
+      "question": "National Science Day is celebrated in India on which date?",
+      "options": [
+        "A. February 28th",
+        "B. August 20th",
+        "C. November 10th",
+        "D. January 26th"
+      ],
+      "correctAnswer": "A",
+      "explanation": "National Science Day is celebrated on February 28th."
+    }
+  ]
 }

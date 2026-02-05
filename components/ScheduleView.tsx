@@ -211,7 +211,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTas
                                                     {isTaskDone && <span className="text-white text-[10px]">✓</span>}
                                                 </div>
                                                 <div className="flex flex-col">
-                                                    <span className={`text-sm font-bold ${isTaskDone ? 'text-green-600 dark:text-green-400 line-through opacity-60' : 'text-gray-700 dark:text-gray-300'}`}>{task}</span>
+                                                    <span className={`text-sm font-bold ${isTaskDone ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>{task}</span>
                                                     {isTaskDone && mcqValue > 0 && (
                                                         <span className="text-[9px] font-black text-sky-500 uppercase tracking-tighter">
                                                             Mastery Score: {mcqValue / 2}/10 {mcqValue >= 18 ? '✅ Mastery' : '⚠️ Low Validation'}
