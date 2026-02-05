@@ -102,19 +102,19 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
 
   return (
     <div className={`min-h-screen flex flex-col ${theme === 'dark' ? 'dark bg-[#070b14] text-gray-100' : 'bg-sky-50/30 text-gray-900'}`}>
-      <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b dark:border-slate-800 sticky top-0 z-50 px-4 md:px-8 py-3 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0 shadow-sm transition-colors">
-        <div className="flex items-center space-x-4">
+      <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b dark:border-slate-800 sticky top-0 z-50 px-4 md:px-8 py-3 flex flex-col lg:flex-row justify-between items-center space-y-4 lg:space-y-0 shadow-sm transition-colors">
+        <div className="flex items-center justify-between w-full lg:w-auto space-x-4">
           <div className="flex items-center space-x-3 group cursor-pointer" onClick={() => setActiveTab('dashboard')}>
             <img src="/logo.png" alt="Vetri Pathai" className="h-10 md:h-12 w-auto rounded-xl shadow-md transition-all group-hover:scale-110 group-hover:rotate-3" />
-            <h1 className="text-xl font-black text-sky-900 dark:text-sky-400 tracking-tight">Vetri Pathai</h1>
+            <h1 className="text-xl font-black text-sky-900 dark:text-sky-400 tracking-tight whitespace-nowrap">Vetri Pathai</h1>
           </div>
-          <div className="hidden md:flex ml-4 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 px-3 py-1 rounded-full text-[10px] font-bold items-center space-x-1 border border-orange-200 dark:border-orange-800">
+          <div className="flex bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 px-3 py-1 rounded-full text-[10px] font-bold items-center space-x-1 border border-orange-200 dark:border-orange-800">
             <span>🔥</span>
             <span>{streak} {t.days}</span>
           </div>
         </div>
 
-        <nav className="hidden md:flex space-x-1 bg-gray-50 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700 overflow-x-auto no-scrollbar max-w-full">
+        <nav className="hidden lg:flex flex-wrap justify-center gap-1 bg-gray-50 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700 max-w-full">
           <NavItem id="dashboard" label={t.dashboard} icon="📊" />
           <NavItem id="schedule" label={t.schedule} icon="📅" restricted />
           <NavItem id="syllabus" label={t.syllabus} icon="📖" restricted />
@@ -123,18 +123,18 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
           <NavItem id="history" label={t.history} icon="📜" restricted />
         </nav>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center justify-center lg:justify-end space-x-3 w-full lg:w-auto">
           {installPrompt && (
             <button
               onClick={handleInstallClick}
-              className="hidden lg:flex items-center space-x-2 px-3 py-1.5 bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-800 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-sky-600 hover:text-white transition-all animate-bounce"
+              className="flex items-center space-x-2 px-3 py-1.5 bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-800 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-sky-600 hover:text-white transition-all animate-bounce"
             >
               <span>📥</span>
               <span>Install App</span>
             </button>
           )}
 
-          <div className="hidden lg:flex flex-col items-end mr-2">
+          <div className="hidden xl:flex flex-col items-end mr-2">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">{currentUser?.fullName}</p>
             <p className="text-[10px] text-sky-600 font-bold">{maskEmail(currentUser?.email)}</p>
           </div>
@@ -167,7 +167,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, lang
       </header >
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-gray-100 dark:border-slate-800 z-[60] flex items-center justify-around px-2 py-2 safe-bottom">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-gray-100 dark:border-slate-800 z-[60] flex items-center justify-around px-2 py-2 safe-bottom">
         {[
           { id: 'dashboard', label: t.dashboard, icon: '📊' },
           { id: 'schedule', label: t.schedule, icon: '📅', restricted: true },

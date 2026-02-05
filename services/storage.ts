@@ -91,7 +91,53 @@ export function loadState(email?: string): AppState {
   return defaultState;
 }
 
-// Global user list management
+// Backend Auth Operations
+export async function signupBackend(user: User): Promise<User> {
+  const res = await fetch(`${API_URL}/api/auth/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user)
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error);
+  saveUserLocal(data.user);
+  return data.user;
+}
+
+export async function loginBackend(email: string, pass: string): Promise<User> {
+  const res = await fetch(`${API_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: pass })
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error);
+  saveUserLocal(data.user);
+  return data.user;
+}
+
+export async function resetPasswordBackend(email: string, newPass: string) {
+  const res = await fetch(`${API_URL}/api/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, newPassword: newPass })
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error);
+}
+
+export async function updateUserBackend(user: User) {
+  const res = await fetch(`${API_URL}/api/auth/update-user`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user)
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error);
+  saveUserLocal(user);
+}
+
+// Global user list management (Local Cache)
 export function getAllUsers(): User[] {
   const saved = localStorage.getItem(USERS_KEY);
   let users: User[] = saved ? JSON.parse(saved) : [];
@@ -117,7 +163,7 @@ export function getAllUsers(): User[] {
   return users;
 }
 
-export function saveUser(user: User) {
+export function saveUserLocal(user: User) {
   const users = getAllUsers();
   const index = users.findIndex(u => u.email === user.email);
   if (index > -1) {
@@ -130,6 +176,11 @@ export function saveUser(user: User) {
 
 export function getUserByEmail(email: string): User | undefined {
   return getAllUsers().find(u => u.email === email);
+}
+
+// Deprecated: use updateUserBackend
+export function saveUser(user: User) {
+  saveUserLocal(user);
 }
 
 // Current session management

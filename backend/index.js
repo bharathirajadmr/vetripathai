@@ -9,6 +9,46 @@ const cron = require('node-cron');
 const QUIZ_BANK_PATH = path.join(__dirname, 'data', 'quiz_bank.json');
 const CA_DB_PATH = path.join(__dirname, 'data', 'current_affairs_db.json');
 const MOCK_BANK_PATH = path.join(__dirname, 'data', 'mock_bank.json');
+const USERS_FILE = path.join(__dirname, 'data', 'users.json');
+
+// Initialize users file if missing
+if (!fs.existsSync(USERS_FILE)) {
+    const adminExpiry = new Date();
+    adminExpiry.setFullYear(adminExpiry.getFullYear() + 10);
+    const initialUsers = [
+        {
+            fullName: 'VetriPathai Admin',
+            email: 'admin@vetripathai.pro',
+            mobile: '9999999999',
+            password: 'admin',
+            subscriptionStatus: 'active',
+            subscriptionExpiry: adminExpiry.toISOString(),
+            deviceId: 'ADMIN_DEVICE',
+            lastLoginTime: new Date().toISOString()
+        }
+    ];
+    if (!fs.existsSync(path.dirname(USERS_FILE))) fs.mkdirSync(path.dirname(USERS_FILE), { recursive: true });
+    fs.writeFileSync(USERS_FILE, JSON.stringify(initialUsers, null, 2));
+}
+
+function getAllUsers() {
+    try {
+        return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveUser(user) {
+    const users = getAllUsers();
+    const index = users.findIndex(u => u.email === user.email);
+    if (index > -1) {
+        users[index] = { ...users[index], ...user };
+    } else {
+        users.push(user);
+    }
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
 
 dotenv.config();
 
@@ -65,10 +105,18 @@ function cleanAndParseJSON(text) {
 
 // Helper for AI generation with JSON schema Support
 async function generateAIResponse(modelName, prompt, schema = null, search = false, isRetry = false) {
-    // Force gemini-2.0-flash as it's the only one working for this user
-    const activeModel = (modelName === 'RETRY_INTERNAL' || modelName === 'gemini-1.5-flash-latest' || modelName === 'gemini-1.5-flash')
-        ? 'gemini-2.0-flash'
-        : modelName;
+    // Priority Pool: If we are retrying, escalate to Pro for reliability
+    let activeModel = modelName;
+
+    if (isRetry && activeModel.includes('flash')) {
+        activeModel = 'gemini-1.5-pro'; // Escalate to most powerful model on failure
+        console.log(`[Escalation] Switching to ${activeModel} for reliability.`);
+    }
+
+    // Default to 2.0 Flash for speed
+    if (activeModel === 'gemini-1.5-flash' || activeModel === 'gemini-1.5-flash-latest') {
+        activeModel = 'gemini-2.0-flash';
+    }
 
     console.log(`[AI Request] Model: ${activeModel}, Search: ${search}, Length: ${prompt.length}${isRetry ? ' (RETRY)' : ''}`);
 
@@ -88,9 +136,11 @@ async function generateAIResponse(modelName, prompt, schema = null, search = fal
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             generationConfig: (schema && !search) ? {
                 responseMimeType: "application/json",
-                temperature: 0.1
+                temperature: 0.1,
+                maxOutputTokens: 8192
             } : {
-                temperature: search ? 0.4 : 0.7
+                temperature: search ? 0.4 : 0.7,
+                maxOutputTokens: 4096
             }
         });
 
@@ -140,6 +190,44 @@ async function generateAIResponse(modelName, prompt, schema = null, search = fal
     }
 }
 
+// Auth Routes
+app.post('/api/auth/signup', (req, res) => {
+    const userData = req.body;
+    const users = getAllUsers();
+    if (users.find(u => u.email === userData.email)) {
+        return res.status(400).json({ success: false, error: 'Email already registered' });
+    }
+    saveUser(userData);
+    res.json({ success: true, user: userData });
+});
+
+app.post('/api/auth/login', (req, res) => {
+    const { email, password } = req.body;
+    const user = getAllUsers().find(u => u.email === email);
+    if (!user || user.password !== password) {
+        return res.status(401).json({ success: false, error: 'Invalid email or password' });
+    }
+    // Update last login
+    const updatedUser = { ...user, lastLoginTime: new Date().toISOString() };
+    saveUser(updatedUser);
+    res.json({ success: true, user: updatedUser });
+});
+
+app.post('/api/auth/reset-password', (req, res) => {
+    const { email, newPassword } = req.body;
+    const user = getAllUsers().find(u => u.email === email);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    user.password = newPassword;
+    saveUser(user);
+    res.json({ success: true });
+});
+
+app.post('/api/auth/update-user', (req, res) => {
+    const userData = req.body;
+    saveUser(userData);
+    res.json({ success: true });
+});
+
 // Routes
 app.post('/api/extract-syllabus', async (req, res) => {
     console.log("-> /api/extract-syllabus");
@@ -188,13 +276,13 @@ app.post('/api/generate-schedule', async (req, res) => {
             startDate = today;
         }
 
-        const periodDays = 30;
+        const periodDays = config.daysToGenerate || 15;
         const endDate = new Date(startDate.getTime() + (periodDays * 86400000));
 
-        const startStr = startDate instanceof Date && !isNaN(startDate) ? startDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-        const endStr = endDate instanceof Date && !isNaN(endDate) ? endDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+        const startStr = startDate.toISOString().split('T')[0];
+        const endStr = endDate.toISOString().split('T')[0];
 
-        console.log(`[Schedule Gen] Exam: ${config.examDate}, Days Left: ${daysUntilExam}, Period: ${startStr} to ${endStr}`);
+        console.log(`[Schedule Gen] Exam: ${config.examDate}, Days Left: ${daysUntilExam}, Period: ${startStr} to ${endStr} (${periodDays} days)`);
 
         const completedTopics = progressData?.completedTopics || [];
         const missedTopics = progressData?.missedTopics || [];
@@ -202,7 +290,7 @@ app.post('/api/generate-schedule', async (req, res) => {
 
         let progressContext = "";
         if (completedTopics.length > 0) {
-            progressContext += `\nCompleted topics (don't repeat): ${completedTopics.join(', ')}`;
+            progressContext += `\nCompleted topics (don't repeat): ${completedTopics.slice(-20).join(', ')}`; // Last 20 for context
         }
         if (missedTopics.length > 0) {
             progressContext += `\nMISSED topics (MUST include with priority): ${missedTopics.join(', ')}`;
@@ -216,7 +304,7 @@ app.post('/api/generate-schedule', async (req, res) => {
             ? "EXAM IS NEAR: Increase revision days, add more mock tests, focus on high-yield topics."
             : "Regular pace: Balance new topics with revision.";
 
-        const prompt = `As a TNPSC Expert, generate a 30-day Study Plan.
+        const prompt = `As a TNPSC Expert, generate a ${periodDays}-day Study Plan segment.
         
 START DATE: ${startStr}
 END DATE: ${endStr}
@@ -231,18 +319,16 @@ ${progressContext}
 ${intensityNote}
 
 RULES:
-1. Generate EXACTLY 30 days starting from ${startStr}.
-2. If techniques include 'Interleaved Study', EACH daily "tasks" array MUST have exactly 3 items: 
-   - Slot 1: A Core subject topic (Polity/History/Unit 8) - ~2 hrs.
-   - Slot 2: Aptitude & Mental Ability topic (Unit 10) - ~1 hr.
-   - Slot 3: Dynamic subject topic (Current Affairs/Science & Tech) - ~1.5 hrs.
-   Format these 3 tasks as "Slot 1: [Topic]", "Slot 2: [Topic]", "Slot 3: [Topic]".
+1. Generate EXACTLY ${periodDays} days starting from ${startStr}.
+2. Each "tasks" array MUST have 3 items:
+   - Slot 1: Core Subject (e.g. History/Polity)
+   - Slot 2: Aptitude/Unit 10
+   - Slot 3: Current Affairs or Revision
 3. PRIORITIZE missed topics in first week.
 4. Saturdays: MOCK_TEST.
 5. Sundays: REVISION.
 6. Don't repeat completed topics.
 7. Return ONLY valid JSON array.
-8. If NOT Interleaved, "tasks" can be 3-5 general topics.
 
 Format:
 {
@@ -638,34 +724,60 @@ app.post('/api/admin/settings', (req, res) => {
     }
 });
 
+app.post('/api/mentor/weekly-report', async (req, res) => {
+    console.log("-> /api/mentor/weekly-report");
+    try {
+        const { history, syllabus, lang } = req.body;
+
+        const prompt = `As a strict and honest TNPSC Mentor, analyze this user's study performance.
+        
+SYLLABUS TOTAL: ${syllabus.length} Subjects
+RECENT HISTORY (Last 14 days): ${JSON.stringify(history).substring(0, 20000)}
+
+Analyze:
+1. Syllabus coverage vs pace required for the exam date.
+2. Patterns of time wastage (days missed, subjects skipped).
+3. Identify exactly which subject is strongest and which is being dangerously neglected.
+4. Provide a "Blunt Conclusion": A direct, no-excuses assessment of their current clearance probability. If they are failing, say it. If they are lazy, call it out.
+
+Return ONLY a JSON object with keys:
+"coverageVsRequired": string (e.g. "15% behind scheduled pace"),
+"timeWastagePatterns": string (e.g. "Frequent 2-day gaps observed after Sundays"),
+"strongestArea": string,
+"weakestArea": string,
+"bluntConclusion": string (The direct feedback)
+
+Language: ${lang === 'ta' ? 'Tamil' : 'English'}.`;
+
+        const { text: responseText } = await generateAIResponse("gemini-1.5-pro", prompt, true); // Use Pro for deep analysis
+        const report = cleanAndParseJSON(responseText);
+        res.json({ success: true, data: { ...report, generatedAt: new Date().toISOString() } });
+    } catch (error) {
+        console.error("[ERROR] Mentor Report Failed:", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 app.get('/api/admin/subscribers', (req, res) => {
     try {
+        const users = getAllUsers();
+        // Also check for legacy users who might have states but aren't in users.json yet
         const files = fs.readdirSync(STATE_DIR);
-        const users = files.map(file => {
+        files.forEach(file => {
             try {
-                const data = fs.readFileSync(path.join(STATE_DIR, file), 'utf8');
-                const json = JSON.parse(data);
-
-                // If we have the new format {state, user}
-                if (json.user && json.user.email) return json.user;
-
-                // Legacy format: just state. Extract UserConfig and try to match email
-                const state = json.state || json;
                 const emailBase64 = file.replace('.json', '');
-                let email = 'Unknown';
-                try {
-                    email = Buffer.from(emailBase64, 'base64').toString('utf8');
-                } catch (e) { }
-
-                return {
-                    fullName: (state.user && state.user.examName) ? `Candidate (${state.user.examName})` : 'Anonymous Aspirant',
-                    email: email,
-                    mobile: 'Not Provided',
-                    subscriptionStatus: 'trial',
-                    subscriptionExpiry: new Date().toISOString()
-                };
-            } catch (e) { return null; }
-        }).filter(u => u);
+                const email = Buffer.from(emailBase64, 'base64').toString('utf8');
+                if (!users.find(u => u.email === email)) {
+                    const data = JSON.parse(fs.readFileSync(path.join(STATE_DIR, file), 'utf8'));
+                    const userObj = data.user || {
+                        fullName: 'Legacy User',
+                        email: email,
+                        subscriptionStatus: 'trial'
+                    };
+                    users.push(userObj);
+                }
+            } catch (err) { }
+        });
         res.json({ success: true, data: users });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });

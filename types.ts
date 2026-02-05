@@ -84,6 +84,15 @@ export interface Badge {
   unlockedDate?: string;
 }
 
+export interface MentorReport {
+  generatedAt: string;
+  coverageVsRequired: string; // e.g. "Currently 15% behind target"
+  timeWastagePatterns: string;
+  strongestArea: string;
+  weakestArea: string;
+  bluntConclusion: string; // The "killer" feedback
+}
+
 export interface AppState {
   user: UserConfig | null;
   syllabus: SyllabusItem[] | null;
@@ -102,6 +111,7 @@ export interface AppState {
   currentAffairs?: CurrentAffairItem[];
   motivation?: string;
   mentorInsights?: string[];
+  mentorReport?: MentorReport;
 }
 
 export interface DashboardStats {

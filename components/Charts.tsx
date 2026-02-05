@@ -38,9 +38,18 @@ export const CompletionChart: React.FC<ChartProps> = ({ data, type, title }) => 
       <div className="w-full h-64">
         <ResponsiveContainer width="100%" height="100%">
           {type === 'bar' ? (
-            <BarChart data={data}>
+            <BarChart data={data} margin={{ bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
+              <XAxis
+                dataKey="name"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 9, fill: '#64748b' }}
+                angle={-20}
+                textAnchor="end"
+                height={60}
+                interval={0}
+              />
               <YAxis hide />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
               <Bar dataKey="percentage" radius={[6, 6, 0, 0]} barSize={40}>
@@ -50,14 +59,19 @@ export const CompletionChart: React.FC<ChartProps> = ({ data, type, title }) => 
               </Bar>
             </BarChart>
           ) : (
-            <LineChart data={data}>
+            <LineChart data={data} margin={{ bottom: 10 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+              <XAxis
+                dataKey="name"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 10, fill: '#64748b' }}
+              />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
               <Tooltip content={<CustomTooltip />} />
               <Line
                 type="monotone"
-                dataKey="hours"
+                dataKey="percentage"
                 stroke="#0284c7"
                 strokeWidth={4}
                 dot={{ fill: '#0284c7', stroke: '#fff', strokeWidth: 2, r: 5 }}

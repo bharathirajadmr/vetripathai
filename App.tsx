@@ -126,9 +126,41 @@ const MainApp: React.FC = () => {
     // Show success message
     setTimeout(() => {
       alert(config.language === 'en'
-        ? '🎉 Congratulations! Your personalized study plan has been generated. Head over to the Schedule tab to start your journey!'
-        : '🎉 வாழ்த்துகள்! உங்கள் தனிப்பயன் ஆய்வுத் திட்டம் உருவாக்கப்பட்டது. உங்கள் பயணத்தைத் தொடங்க அட்டவணை (Schedule) பகுதிக்குச் செல்லுங்கள்!');
+        ? '🎉 Your initial 15-day plan is ready! We are generating the rest of the month in the background.'
+        : '🎉 உங்கள் முதல் 15 நாள் திட்டம் தயார்! மீதமுள்ள நாட்களுக்கான திட்டம் பின்னணியில் உருவாக்கப்படுகிறது.');
     }, 500);
+
+    // Background extension: If we only got 15 days, fetch the next 15
+    if (processedSchedule.length === 15) {
+      const lastDay = processedSchedule[14];
+      const completedTopics = syllabus.flatMap(s => s.topics.map(t => t.name)).filter(t =>
+        processedSchedule.some(d => d.tasks.some(task => task.toLowerCase().includes(t.toLowerCase())))
+      );
+
+      generateSchedule(syllabus, { ...config, daysToGenerate: 15 } as any, state.questionPapersContent, {
+        completedTopics,
+        missedTopics: [],
+        hardTopics: state.hardTopics || [],
+        lastGeneratedDate: lastDay.date
+      }).then(extendedDays => {
+        setState(prev => {
+          if (!prev.schedule) return prev;
+          // Avoid duplicates
+          const existingDates = new Set(prev.schedule.map(d => d.date));
+          const newDays = extendedDays.filter(d => !existingDates.has(d.date)).map(day => ({
+            ...day,
+            id: day.id.includes('day-') && day.id.length < 10 ? `day-${day.date}` : day.id
+          }));
+
+          const newState = {
+            ...prev,
+            schedule: [...prev.schedule, ...newDays]
+          };
+          saveState(newState, currentUser?.email);
+          return newState;
+        });
+      }).catch(err => console.error("Background extension failed", err));
+    }
   };
 
   const handleToggleTask = (dayId: string, taskIndex: number, mcqCount: number = 0) => {
@@ -296,6 +328,7 @@ const MainApp: React.FC = () => {
                 state={state}
                 onRegenerateSchedule={handleOpenSetup}
                 loading={loading}
+                onUpdateState={(ns) => { setState(ns); saveState(ns, currentUser?.email); }}
               />
             )}
 

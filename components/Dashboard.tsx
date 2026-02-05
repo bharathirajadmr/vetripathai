@@ -1,23 +1,42 @@
 import React from 'react';
 import { TRANSLATIONS, RANKS } from '../constants';
-import { fetchDailySummary } from '../services/gemini';
-import { Language, AppState } from '../types';
+import { fetchDailySummary, generateMentorReport } from '../services/gemini';
+import { Language, AppState, MentorReport } from '../types';
 import { API_URL } from '../constants';
 import { CompletionChart, CircularChart } from './Charts';
 import PracticeQuestion from './PracticeQuestion';
+import { saveState } from '../services/storage';
 
 interface DashboardProps {
     lang: Language;
     state: AppState;
     onRegenerateSchedule?: () => void;
     loading?: boolean;
+    onUpdateState?: (newState: AppState) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ lang, state, onRegenerateSchedule, loading }) => {
+const Dashboard: React.FC<DashboardProps> = ({ lang, state, onRegenerateSchedule, loading, onUpdateState }) => {
     const t = TRANSLATIONS[lang];
     const [summaryLoading, setSummaryLoading] = React.useState(false);
+    const [reportLoading, setReportLoading] = React.useState(false);
     const [showRankJourney, setShowRankJourney] = React.useState(false);
     const [leaderboard, setLeaderboard] = React.useState<any[]>([]);
+
+    const handleGenerateReport = async () => {
+        if (!state.schedule || !state.syllabus) return;
+        setReportLoading(true);
+        try {
+            const report = await generateMentorReport(state.schedule, state.syllabus, lang);
+            const newState = { ...state, mentorReport: report };
+            if (onUpdateState) onUpdateState(newState);
+            else saveState(newState); // Fallback
+        } catch (e) {
+            console.error("Report generation failed", e);
+            alert("Failed to generate report. Please try again.");
+        } finally {
+            setReportLoading(false);
+        }
+    };
 
     React.useEffect(() => {
         const fetchLeaderboard = async () => {
@@ -159,6 +178,48 @@ const Dashboard: React.FC<DashboardProps> = ({ lang, state, onRegenerateSchedule
 
     const stats = calculateWeightedProgress();
 
+    // Red Alert Detection (3 days No Study)
+    const checkRedAlert = () => {
+        if (!state.schedule) return false;
+        const today = new Date().toISOString().split('T')[0];
+        const past3Days = state.schedule
+            .filter(d => d.date < today)
+            .sort((a, b) => b.date.localeCompare(a.date))
+            .slice(0, 3);
+
+        if (past3Days.length < 3) return false;
+        return past3Days.every(d => !d.completedTasks || d.completedTasks.length === 0);
+    };
+
+    // Subject Neglect Detection (10 days)
+    const getNeglectedSubjects = () => {
+        if (!state.schedule || !state.syllabus) return [];
+        const today = new Date().toISOString().split('T')[0];
+
+        // Grace period: Don't show neglect warning if there's no history (first day)
+        const hasHistory = state.schedule.some(d => d.date < today && d.completedTasks && d.completedTasks.length > 0);
+        if (!hasHistory) return [];
+
+        const past10Days = state.schedule
+            .filter(d => d.date < today)
+            .sort((a, b) => b.date.localeCompare(a.date))
+            .slice(0, 10);
+
+        if (past10Days.length === 0) return [];
+        return state.syllabus.filter(subj => {
+            const subjTopics = subj.topics.map(t => t.name.toLowerCase());
+            const touches = past10Days.some(day =>
+                day.completedTasks?.some(task =>
+                    subjTopics.some(topic => task.toLowerCase().includes(topic))
+                )
+            );
+            return !touches;
+        }).map(s => s.subject);
+    };
+
+    const isRedAlert = checkRedAlert();
+    const neglectedSubjects = getNeglectedSubjects();
+
     // Mentor Insights Logic
     const generateMentorInsights = () => {
         const insights: string[] = [];
@@ -187,10 +248,34 @@ const Dashboard: React.FC<DashboardProps> = ({ lang, state, onRegenerateSchedule
     const mentorInsights = generateMentorInsights();
 
     // Gamification calculations
-    const currentRank = [...RANKS].reverse().find(r => (state.level || 1) >= r.level) || RANKS[0];
-    const nextRankIndex = RANKS.findIndex(r => r.level === currentRank.level) + 1;
-    const nextRank = RANKS[nextRankIndex] || null;
+    const currentRank = RANKS.find(r => (state.level || 1) >= r.level) || RANKS[0];
+    const nextRank = RANKS.find(r => r.level > (state.level || 1));
     const xpProgress = (state.xp || 0) % 100;
+
+    // Study Consistency Calculation (Last 7 Days)
+    const calculateConsistency = () => {
+        if (!state.schedule) return [];
+        const today = new Date().toISOString().split('T')[0];
+        const last7Days = state.schedule
+            .filter(d => d.date <= today)
+            .sort((a, b) => b.date.localeCompare(a.date))
+            .slice(0, 7)
+            .reverse();
+
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return last7Days.map(d => {
+            const dateObj = new Date(d.date);
+            const dayName = days[dateObj.getDay()];
+            const total = d.tasks.length;
+            const completed = d.completedTasks?.length || 0;
+            return {
+                name: dayName,
+                percentage: total > 0 ? Math.round((completed / total) * 100) : 0
+            };
+        });
+    };
+
+    const consistencyData = calculateConsistency();
 
     // Get topics for practice question (last few completed or upcoming)
     const relevantTopics = state.schedule?.find(d => !d.isCompleted)?.tasks || [];
@@ -302,6 +387,47 @@ const Dashboard: React.FC<DashboardProps> = ({ lang, state, onRegenerateSchedule
                                 })}
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+            {/* Mentor Alerts */}
+            {isRedAlert && (
+                <div className="bg-red-600 border-4 border-red-800 rounded-[2rem] p-6 text-white shadow-2xl animate-pulse">
+                    <div className="flex items-center space-x-4">
+                        <span className="text-5xl">🚨</span>
+                        <div>
+                            <h3 className="text-2xl font-black uppercase tracking-tighter">RED ALERT: CONSISTENCY FAILURE</h3>
+                            <p className="font-bold opacity-90">You haven't completed a single task in 3 days. Your exam probability is dropping rapidly.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {neglectedSubjects.length > 0 && !isRedAlert && (
+                <div className="bg-amber-100 border-l-8 border-amber-600 rounded-3xl p-6 text-amber-900 shadow-lg">
+                    <div className="flex items-center space-x-4">
+                        <span className="text-3xl">⚠️</span>
+                        <div>
+                            <h3 className="font-black uppercase text-sm tracking-widest">Subject Neglect Warning</h3>
+                            <p className="text-sm font-medium">You haven't touched <span className="font-black underline">{neglectedSubjects.join(', ')}</span> in over 10 days. This creates a massive knowledge gap.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+
+            {state.schedule?.length === 15 && (
+                <div className="bg-sky-50 border border-sky-100 rounded-[2rem] p-4 flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-3">
+                        <span className="text-xl animate-bounce">⚡</span>
+                        <p className="text-[11px] font-black text-sky-800 uppercase tracking-widest">
+                            {lang === 'en' ? 'Phase 1 Ready! Generating Phase 2 in background...' : 'கட்டம் 1 தயார்! கட்டம் 2 பின்னணியில் உருவாக்கப்படுகிறது...'}
+                        </p>
+                    </div>
+                    <div className="flex space-x-1">
+                        <div className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
+                        <div className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                        <div className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
                     </div>
                 </div>
             )}
@@ -495,6 +621,19 @@ const Dashboard: React.FC<DashboardProps> = ({ lang, state, onRegenerateSchedule
             </div>
 
             <div className="grid lg:grid-cols-2 gap-8">
+                <CompletionChart
+                    data={subjectProgress.slice(0, 6)}
+                    type="bar"
+                    title={lang === 'en' ? 'Subject Mastery' : 'பாட தேர்ச்சி'}
+                />
+                <CompletionChart
+                    data={consistencyData}
+                    type="line"
+                    title={lang === 'en' ? 'Study Consistency' : 'படிப்பு நிலைப்புத்தன்மை'}
+                />
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-8">
                 <CircularChart data={distributionData} type="bar" title={lang === 'en' ? 'Time Distribution' : 'நேர ஒதுக்கீடு'} />
                 <div className="bg-sky-600 p-8 rounded-3xl text-white flex flex-col justify-center items-center text-center space-y-4 shadow-xl shadow-sky-200">
                     <h3 className="text-xl font-black">{lang === 'en' ? 'Need a new plan?' : 'புதிய திட்டம் வேண்டுமா?'}</h3>
@@ -514,6 +653,67 @@ const Dashboard: React.FC<DashboardProps> = ({ lang, state, onRegenerateSchedule
                 topics={relevantTopics}
                 questionPapers={state.questionPapersContent}
             />
+
+            {/* Weekly Mentor Report Card (Moved to bottom) */}
+            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden relative group mt-8">
+                <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                    <span className="text-8xl">👔</span>
+                </div>
+                <div className="p-8">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h3 className="text-2xl font-black text-gray-900 dark:text-gray-200">Weekly Mentor Report</h3>
+                        </div>
+                        <button
+                            onClick={handleGenerateReport}
+                            disabled={reportLoading}
+                            className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
+                        >
+                            {reportLoading ? 'Analyzing History...' : (state.mentorReport ? 'Refresh Analysis' : 'Generate Weekly Report')}
+                        </button>
+                    </div>
+
+                    {state.mentorReport ? (
+                        <div className="grid md:grid-cols-2 gap-8">
+                            <div className="space-y-6">
+                                <div className="p-6 bg-indigo-50 dark:bg-slate-800 rounded-3xl border border-indigo-100 dark:border-slate-700">
+                                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Blunt Conclusion</p>
+                                    <p className="text-xl font-black text-indigo-900 dark:text-indigo-200 leading-tight italic line-clamp-4">
+                                        "{state.mentorReport.bluntConclusion}"
+                                    </p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                                        <p className="text-[8px] font-black text-emerald-600 uppercase mb-1">Strongest Area</p>
+                                        <p className="text-xs font-black text-emerald-900">{state.mentorReport.strongestArea}</p>
+                                    </div>
+                                    <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
+                                        <p className="text-[8px] font-black text-red-600 uppercase mb-1">Danger Zone</p>
+                                        <p className="text-xs font-black text-red-900">{state.mentorReport.weakestArea}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Pace Assessment</p>
+                                    <p className="text-sm font-bold text-gray-700 dark:text-gray-300">{state.mentorReport.coverageVsRequired}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Time Wastage Analysis</p>
+                                    <p className="text-sm font-bold text-gray-700 dark:text-gray-300">{state.mentorReport.timeWastagePatterns}</p>
+                                </div>
+                                <p className="text-[8px] text-gray-400 italic">Last Analysis: {new Date(state.mentorReport.generatedAt).toLocaleDateString()}</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="py-12 text-center bg-gray-50 dark:bg-slate-800/50 rounded-[2rem] border-2 border-dashed border-gray-200 dark:border-slate-700">
+                            <span className="text-4xl block mb-4">📈</span>
+                            <p className="text-gray-500 font-bold">Your weekly performance analysis is ready.</p>
+                            <p className="text-[10px] text-gray-400 uppercase mt-1">Request a report to see coverage vs pace and blunt reality.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 };

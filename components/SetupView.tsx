@@ -84,10 +84,8 @@ const SetupView: React.FC<SetupViewProps> = ({ lang, onComplete, initialConfig, 
 
             setLoadingStatus(lang === 'en' ? 'Generating your personalized plan...' : 'உங்கள் தனிப்பயன் திட்டத்தை உருவாக்குகிறது...');
 
-            // For regeneration, we might want to pass progress data. 
-            // But if the user wants to "ask from beginning", they might want to overwrite.
-            // Let's check if they have a schedule and provide that as context.
-            const schedule = await generateSchedule(syllabus, config, papersText);
+            // Generate initial 15 days for speed and reliability
+            const schedule = await generateSchedule(syllabus, { ...config, daysToGenerate: 15 } as any, papersText);
 
             onComplete(config, syllabus, schedule);
         } catch (error: any) {
@@ -310,7 +308,8 @@ const SetupView: React.FC<SetupViewProps> = ({ lang, onComplete, initialConfig, 
                         onClick={handleGenerate}
                         disabled={
                             syllabusMode === 'preset' ? !selectedExamId :
-                                syllabusMode === 'file' ? !syllabusFile : !syllabusText.trim()
+                                syllabusMode === 'file' ? !syllabusFile :
+                                    syllabusMode === 'current' ? !initialSyllabus : !syllabusText.trim()
                         }
                         className="w-full bg-sky-600 text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-sky-200 hover:bg-sky-700 transition-all active:scale-[0.98] disabled:opacity-50"
                     >

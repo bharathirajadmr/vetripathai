@@ -92,3 +92,11 @@ export async function fetchDailySummary(tasks: string[], language: 'en' | 'ta'):
   if (!result.success) throw new Error(result.error);
   return result.summary;
 }
+
+export async function generateMentorReport(
+  history: StudyDay[],
+  syllabus: SyllabusItem[],
+  lang: 'en' | 'ta'
+): Promise<any> {
+  return apiCall<any>('/api/mentor/weekly-report', 'POST', { history, syllabus, lang });
+}

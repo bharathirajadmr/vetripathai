@@ -1,0 +1,22 @@
+[
+  {
+    "fullName": "VetriPathai Admin",
+    "email": "admin@vetripathai.pro",
+    "mobile": "9999999999",
+    "password": "admin",
+    "subscriptionStatus": "active",
+    "subscriptionExpiry": "2036-02-05T14:05:20.406Z",
+    "deviceId": "ADMIN_DEVICE",
+    "lastLoginTime": "2026-02-05T14:05:20.407Z"
+  },
+  {
+    "fullName": "Bharathiraja",
+    "email": "bharathirajaa1989@gmail.com",
+    "mobile": "987654321",
+    "password": "123",
+    "subscriptionStatus": "trial",
+    "subscriptionExpiry": "2026-02-12T14:06:38.613Z",
+    "deviceId": "iyun7a3ot",
+    "lastLoginTime": "2026-02-05T14:06:38.613Z"
+  }
+]

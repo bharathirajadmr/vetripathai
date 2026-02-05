@@ -45,31 +45,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, pass: string) => {
     setError(null);
-    const user = storage.getUserByEmail(email);
-
-    if (!user || user.password !== pass) {
-      throw new Error("Invalid email or password");
+    try {
+      const user = await storage.loginBackend(email, pass);
+      storage.saveSession(user);
+      setCurrentUser(user);
+    } catch (e: any) {
+      throw new Error(e.message || "Invalid email or password");
     }
-
-    const updatedUser: User = {
-      ...user,
-      lastLoginTime: new Date().toISOString(),
-      // In a real app, this deviceId would come from fingerprinting or browser ID
-      deviceId: Math.random().toString(36).substr(2, 9)
-    };
-
-    storage.saveUser(updatedUser);
-    storage.saveSession(updatedUser);
-    setCurrentUser(updatedUser);
   };
 
   const signup = async (userData: Partial<User>) => {
     setError(null);
-    const existing = storage.getUserByEmail(userData.email!);
-    if (existing) {
-      throw new Error("Email already registered");
-    }
-
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + 7);
 
@@ -84,28 +70,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       lastLoginTime: new Date().toISOString()
     };
 
-    storage.saveUser(newUser);
-    storage.saveSession(newUser);
-    setCurrentUser(newUser);
+    try {
+      const savedUser = await storage.signupBackend(newUser);
+      storage.saveSession(savedUser);
+      setCurrentUser(savedUser);
+    } catch (e: any) {
+      throw new Error(e.message || "Signup failed");
+    }
   };
 
   const resetPassword = async (email: string, newPass: string) => {
     setError(null);
-    const user = storage.getUserByEmail(email);
-    if (!user) {
-      throw new Error("Email not found");
-    }
-
-    const updatedUser: User = {
-      ...user,
-      password: newPass
-    };
-
-    storage.saveUser(updatedUser);
-    // If resetting for current user (though usually logged out)
-    if (currentUser?.email === email) {
-      storage.saveSession(updatedUser);
-      setCurrentUser(updatedUser);
+    try {
+      await storage.resetPasswordBackend(email, newPass);
+      // If resetting for current user (though usually logged out)
+      if (currentUser?.email === email) {
+        const updatedUser = { ...currentUser, password: newPass };
+        storage.saveSession(updatedUser);
+        setCurrentUser(updatedUser);
+      }
+    } catch (e: any) {
+      throw new Error(e.message || "Reset failed");
     }
   };
 
@@ -125,9 +110,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       subscriptionExpiry: expiry.toISOString()
     };
 
-    storage.saveUser(updatedUser);
-    storage.saveSession(updatedUser);
-    setCurrentUser(updatedUser);
+    try {
+      await storage.updateUserBackend(updatedUser);
+      storage.saveSession(updatedUser);
+      setCurrentUser(updatedUser);
+    } catch (e: any) {
+      console.error("Subscription update failed on backend", e);
+      // Fallback: save local only if network fails? 
+      // Better to maintain consistency: throw error.
+    }
   };
 
   const activateWithCode = async (code: string) => {
