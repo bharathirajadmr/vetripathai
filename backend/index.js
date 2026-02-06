@@ -15,10 +15,31 @@ dotenv.config();
 const USERS_FILE = path.join(__dirname, 'data', 'users.json');
 const STATE_DIR = path.join(__dirname, 'data', 'states');
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('Connected to MongoDB Atlas'))
-    .catch(err => console.error('MongoDB connection error:', err));
+// MongoDB Connection logic
+const MONGODB_URI = process.env.MONGODB_URI;
+
+// Security: Mask URI for logging
+const maskedURI = MONGODB_URI ? MONGODB_URI.replace(/:([^@]+)@/, ":****@") : "UNDEFINED";
+console.log(`[Startup] Target Database: ${maskedURI}`);
+
+mongoose.connect(MONGODB_URI, {
+    serverSelectionTimeoutMS: 10000, // 10s timeout
+    socketTimeoutMS: 45000,
+})
+    .then(() => console.log('✅ Connected to MongoDB Atlas'))
+    .catch(err => console.error('❌ MongoDB initial connection error:', err));
+
+mongoose.connection.on('error', err => {
+    console.error('❌ MongoDB runtime error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+    console.warn('⚠️ MongoDB disconnected. Attempting to reconnect...');
+});
+
+mongoose.connection.on('connected', () => {
+    console.log('✨ Mongoose connected to Atlas');
+});
 
 const userSchema = new mongoose.Schema({
     fullName: { type: String, required: true },
