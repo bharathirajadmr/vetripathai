@@ -9,8 +9,15 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [lang, setLang] = useState<Language>('en');
-  const { login, resetPassword, logoutReason } = useAuth();
+  const { login, resetPassword, logoutReason, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
   const t = TRANSLATIONS[lang];
 
   const [forgotPassword, setForgotPassword] = useState(false);

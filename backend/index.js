@@ -19,7 +19,7 @@ if (!fs.existsSync(USERS_FILE)) {
         {
             fullName: 'VetriPathai Admin',
             email: 'admin@vetripathai.pro',
-            mobile: '9999999999',
+            mobile: '9884664436',
             password: 'admin',
             subscriptionStatus: 'active',
             subscriptionExpiry: adminExpiry.toISOString(),
@@ -324,11 +324,16 @@ RULES:
    - Slot 1: Core Subject (e.g. History/Polity)
    - Slot 2: Aptitude/Unit 10
    - Slot 3: Current Affairs or Revision
-3. PRIORITIZE missed topics in first week.
-4. Saturdays: MOCK_TEST.
-5. Sundays: REVISION.
-6. Don't repeat completed topics.
-7. Return ONLY valid JSON array.
+3. PRIORITIZE missed topics and "Hard" subjects in first week.
+4. PRIORITY INTENSITY: 
+   - Allocation: For "Hard" subjects, allocate 2x more frequency in Slot 1/2.
+   - For "Easy" subjects, space them out more to avoid cognitive overload.
+5. SATURDAYS: MOCK_TEST on topics studied THIS WEEK.
+6. SUNDAYS: MOCK_TEST on ALL COMPLETED SUBJECTS (Comprehensive Mock Test).
+7. DIVERSITY & STOCHASTIC ORDER: Do not follow the linear order of the provided SYLLABUS list. Rotate core subjects daily (e.g. Day 1: History, Day 2: Polity) to ensure variety.
+8. TECHNIQUE ADHERENCE: If "Interleaved Study" is chosen, strictly mix 3 different subjects per day as defined in Slot 1, 2, 3.
+9. Don't repeat completed topics.
+10. Return ONLY valid JSON array.
 
 Format:
 {
@@ -553,7 +558,8 @@ app.post('/api/mock-test', async (req, res) => {
         1. Base the questions on actual Previous Year Question (PYQ) trends.
         2. Difficulty: Mix of 40% Moderate, 40% High, 20% Very High (Exam level).
         3. Format: ONE question must be 'Match the following', TWO must be 'Assertion & Reason', and others standard MCQs.
-        4. Questions must be unique and historically/scientifically accurate.
+        4. VARIETY: 80% should be from provided topics, 20% should be GENERAL COMMON TNPSC topics (Aptitude, Ethics, Current Affairs) even if not in the "completed" list.
+        5. Questions must be unique and historically/scientifically accurate.
         
         CONTEXT (PYQ Data): ${oldPapers?.substring(0, 8000) || "Follow standard 2024-2025 exam patterns."}
         

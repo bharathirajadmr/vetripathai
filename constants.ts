@@ -193,7 +193,15 @@ export const TRANSLATIONS = {
     sendMessage: "Send Message",
     connectWhatsApp: "Connect on WhatsApp",
     emailUs: "Email Support",
-    officeLocation: "Tamil Nadu, India"
+    officeLocation: "Tamil Nadu, India",
+    reviewSubjects: "Review & Order Subjects",
+    shuffle: "Shuffle",
+    confirmOrder: "Confirm & Generate Plan",
+    reorderDesc: "Change the order of subjects to customize your study sequence.",
+    priorityEasy: "Easy",
+    priorityMedium: "Medium",
+    priorityHard: "Hard",
+    setPriority: "Set Priority"
   },
   ta: {
     dashboard: "தகவல் பலகை",
@@ -366,7 +374,15 @@ export const TRANSLATIONS = {
     sendMessage: "செய்தியை அனுப்புக",
     connectWhatsApp: "WhatsApp மூலம் தொடர்பு கொள்ள",
     emailUs: "மின்னஞ்சல் உதவி",
-    officeLocation: "தமிழ்நாடு, இந்தியா"
+    officeLocation: "தமிழ்நாடு, இந்தியா",
+    reviewSubjects: "பாடங்களைச் சரிபார்க்கவும்",
+    shuffle: "கலக்கவும்",
+    confirmOrder: "உறுதிசெய்து திட்டத்தை உருவாக்கு",
+    reorderDesc: "உங்கள் படிப்பு வரிசையைத் தனிப்பயனாக்க பாடங்களின் வரிசையை மாற்றவும்.",
+    priorityEasy: "எளிது",
+    priorityMedium: "நடுத்தரம்",
+    priorityHard: "கடினம்",
+    setPriority: "முன்னுரிமை"
   }
 };
 

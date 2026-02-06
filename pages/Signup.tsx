@@ -14,8 +14,15 @@ const Signup: React.FC = () => {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [lang, setLang] = useState<Language>('en');
-  const { signup } = useAuth();
+  const { signup, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
   const t = TRANSLATIONS[lang];
 
   const handleSubmit = async (e: React.FormEvent) => {

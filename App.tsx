@@ -123,21 +123,34 @@ const MainApp: React.FC = () => {
     setTheme(config.theme || 'light');
     setActiveTab('schedule'); // Switch to schedule after generation
 
+    // Calculate total days for correct extension and messaging
+    const start = config.startDate ? new Date(config.startDate) : new Date();
+    const end = config.endDate ? new Date(config.endDate) : new Date();
+    const totalDaysRequested = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
     // Show success message
     setTimeout(() => {
-      alert(config.language === 'en'
-        ? '🎉 Your initial 15-day plan is ready! We are generating the rest of the month in the background.'
-        : '🎉 உங்கள் முதல் 15 நாள் திட்டம் தயார்! மீதமுள்ள நாட்களுக்கான திட்டம் பின்னணியில் உருவாக்கப்படுகிறது.');
+      const msg = totalDaysRequested > 15
+        ? (config.language === 'en'
+          ? '🎉 Your initial 15-day plan is ready! We are generating the rest of the plan in the background.'
+          : '🎉 உங்கள் முதல் 15 நாள் திட்டம் தயார்! மீதமுள்ள நாட்களுக்கான திட்டம் பின்னணியில் உருவாக்கப்படுகிறது.')
+        : (config.language === 'en'
+          ? '🎉 Your study plan is ready!'
+          : '🎉 உங்கள் ஆய்வுத் திட்டம் தயார்!');
+      alert(msg);
     }, 500);
 
-    // Background extension: If we only got 15 days, fetch the next 15
-    if (processedSchedule.length === 15) {
+    // Background extension: If we only got 15 days and more are needed
+    if (processedSchedule.length === 15 && totalDaysRequested > 15) {
+      const remainingDays = totalDaysRequested - 15;
+      const daysToGenerate = Math.min(15, remainingDays);
       const lastDay = processedSchedule[14];
+
       const completedTopics = syllabus.flatMap(s => s.topics.map(t => t.name)).filter(t =>
         processedSchedule.some(d => d.tasks.some(task => task.toLowerCase().includes(t.toLowerCase())))
       );
 
-      generateSchedule(syllabus, { ...config, daysToGenerate: 15 } as any, state.questionPapersContent, {
+      generateSchedule(syllabus, { ...config, daysToGenerate } as any, state.questionPapersContent, {
         completedTopics,
         missedTopics: [],
         hardTopics: state.hardTopics || [],
@@ -169,7 +182,7 @@ const MainApp: React.FC = () => {
 
       let xpGain = 0;
       let earnedBadges = [...(prev.badges || [])];
-      const nextSchedule = prev.schedule.map(day => {
+      const nextSchedule = prev.schedule.map((day, idx) => {
         if (day.id === dayId) {
           const task = day.tasks[taskIndex];
           const completedTasks = day.completedTasks || [];
@@ -186,11 +199,24 @@ const MainApp: React.FC = () => {
             nextMcqs[task] = mcqCount;
           }
 
-          if (!isDone) {
-            xpGain += mcqCount >= 20 ? 15 : 5; // More XP for mastery
-            if (!earnedBadges.find(b => b.id === 'first_step')) {
-              const def = BADGE_DEFINITIONS.find(b => b.id === 'first_step');
-              if (def) earnedBadges.push({ ...def, unlockedDate: new Date().toISOString() });
+          // ADAPTIVE: If score is low (< 5/10 which is mcqCount < 10), 
+          // inject "Deep Revision" for the next day's study day.
+          if (!isDone && mcqCount > 0 && mcqCount < 10) {
+            // Find next study day
+            for (let i = idx + 1; i < prev.schedule!.length; i++) {
+              const nextDay = prev.schedule![i];
+              if (nextDay.type === 'STUDY' || nextDay.type === 'REVISION') {
+                const revisionTask = `[Adaptive] Deep Revision: ${task}`;
+                // Ensure we don't add the same revision task multiple times
+                if (!nextDay.tasks.includes(revisionTask)) {
+                  // Create a new day object to maintain immutability
+                  prev.schedule![i] = {
+                    ...nextDay,
+                    tasks: [...nextDay.tasks, revisionTask]
+                  };
+                }
+                break;
+              }
             }
           }
 
@@ -210,7 +236,7 @@ const MainApp: React.FC = () => {
 
       const newState = {
         ...prev,
-        schedule: nextSchedule,
+        schedule: [...nextSchedule], // Ensure new array reference
         xp: newXp,
         level: newLevel,
         badges: earnedBadges
@@ -336,6 +362,7 @@ const MainApp: React.FC = () => {
               <ScheduleView
                 lang={lang}
                 schedule={state.schedule || []}
+                syllabus={state.syllabus || []}
                 onToggleTask={handleToggleTask}
                 onMarkHard={handleMarkHard}
                 hardTopics={state.hardTopics}

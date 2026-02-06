@@ -27,6 +27,7 @@ export interface UserConfig {
 
 export interface SyllabusItem {
   subject: string;
+  priority?: 'Easy' | 'Medium' | 'Hard';
   topics: {
     name: string;
     subtopics: string[];

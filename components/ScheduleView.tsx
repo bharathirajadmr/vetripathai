@@ -1,11 +1,13 @@
 
 import React from 'react';
 import { TRANSLATIONS, API_URL } from '../constants';
-import { Language, StudyDay } from '../types';
+import { Language, StudyDay, SyllabusItem } from '../types';
+import ReadinessDashboard from './ReadinessDashboard';
 
 interface ScheduleViewProps {
     lang: Language;
     schedule: StudyDay[];
+    syllabus?: SyllabusItem[];
     onToggleTask: (dayId: string, taskIndex: number, mcqCount: number) => void;
     onMarkHard?: (topic: string) => void;
     hardTopics?: string[];
@@ -13,7 +15,7 @@ interface ScheduleViewProps {
     loading?: boolean;
 }
 
-const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTask, onMarkHard, hardTopics = [], onRegenerateSchedule, loading }) => {
+const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = [], onToggleTask, onMarkHard, hardTopics = [], onRegenerateSchedule, loading }) => {
     const t = TRANSLATIONS[lang];
     const [validationModal, setValidationModal] = React.useState<{ dayId: string; taskIdx: number; taskName: string } | null>(null);
     const [quizLoading, setQuizLoading] = React.useState(false);
@@ -21,20 +23,49 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTas
     const [currentQuestion, setCurrentQuestion] = React.useState(0);
     const [answers, setAnswers] = React.useState<string[]>([]);
     const [quizScore, setQuizScore] = React.useState<number | null>(null);
+    const [timeLeft, setTimeLeft] = React.useState(30);
+    const [isReviewMode, setIsReviewMode] = React.useState(false);
+    const [showResults, setShowResults] = React.useState(false);
 
-    const startQuiz = async (dayId: string, taskIdx: number, taskName: string) => {
+    // Timer logic
+    React.useEffect(() => {
+        let timer: any;
+        if (validationModal && quizQuestions && !showResults && !isReviewMode && timeLeft > 0) {
+            timer = setInterval(() => {
+                setTimeLeft(prev => prev - 1);
+            }, 1000);
+        } else if (timeLeft === 0 && !showResults && !isReviewMode) {
+            handleAnswer('SKIPPED');
+        }
+        return () => clearInterval(timer);
+    }, [timeLeft, validationModal, quizQuestions, showResults, isReviewMode]);
+
+    const startQuiz = async (dayId: string, taskIdx: number, taskName: string, isWeekendTest = false, currentDayIdx = -1) => {
         setValidationModal({ dayId, taskIdx, taskName });
         setQuizLoading(true);
         setQuizQuestions(null);
         setCurrentQuestion(0);
         setAnswers([]);
         setQuizScore(null);
+        setTimeLeft(30);
+        setIsReviewMode(false);
+        setShowResults(false);
 
         try {
-            const response = await fetch(`${API_URL}/api/topic-quiz`, {
+            let endpoint = '/api/topic-quiz';
+            let body: any = { topic: taskName, lang };
+
+            if (isWeekendTest) {
+                endpoint = '/api/mock-test';
+                // For Saturday tests, we should ideally pass only topics from this week.
+                // For simplicity, we'll fetch general mock questions if it's a weekend test.
+                body = { completedTopics: [taskName], lang, subject: taskName };
+            }
+
+            const response = await fetch(`${API_URL}${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ topic: taskName, lang })
+                body: JSON.stringify(body)
             });
             const result = await response.json();
             if (result.success) {
@@ -50,8 +81,9 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTas
     const handleAnswer = (option: string) => {
         const newAnswers = [...answers, option];
         setAnswers(newAnswers);
-        if (currentQuestion < 9) {
+        if (currentQuestion < (quizQuestions?.length || 10) - 1) {
             setCurrentQuestion(currentQuestion + 1);
+            setTimeLeft(30);
         } else {
             // Calculate Score
             let score = 0;
@@ -59,7 +91,17 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTas
                 if (newAnswers[idx] === q.correctAnswer) score++;
             });
             setQuizScore(score);
+            setShowResults(true);
         }
+    };
+
+    const handleRetry = () => {
+        setCurrentQuestion(0);
+        setAnswers([]);
+        setQuizScore(null);
+        setTimeLeft(30);
+        setIsReviewMode(false);
+        setShowResults(false);
     };
 
     const handleConfirmToggle = () => {
@@ -74,6 +116,8 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTas
 
     return (
         <div className="space-y-8 pb-20">
+            {syllabus.length > 0 && <ReadinessDashboard lang={lang} schedule={schedule} syllabus={syllabus} />}
+
             {/* AI Mastery Validation Modal */}
             {validationModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -88,24 +132,64 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTas
                                 <h3 className="text-xl font-black text-sky-900">Generating Mastery Quiz</h3>
                                 <p className="text-gray-500 animate-pulse text-sm">Finding actual exam trends for {validationModal.taskName}...</p>
                             </div>
-                        ) : quizScore !== null ? (
+                        ) : isReviewMode && quizQuestions ? (
+                            <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+                                <h3 className="text-2xl font-black text-sky-900 border-b pb-4">Review Answers</h3>
+                                {quizQuestions.map((q, idx) => (
+                                    <div key={idx} className="p-4 rounded-2xl bg-gray-50 border border-gray-100 space-y-2">
+                                        <p className="font-bold text-slate-800 text-sm">{idx + 1}. {q.question}</p>
+                                        <div className="flex items-center space-x-2 text-xs">
+                                            <span className={`px-2 py-0.5 rounded font-bold ${answers[idx] === q.correctAnswer ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                Your Answer: {answers[idx] || 'Skipped'}
+                                            </span>
+                                            <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-700 font-bold">
+                                                Correct: {q.correctAnswer}
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] text-gray-500 leading-relaxed bg-white p-3 rounded-xl border border-gray-100">
+                                            <span className="font-black text-sky-600 mr-1">Explanation:</span> {q.explanation}
+                                        </p>
+                                    </div>
+                                ))}
+                                <button
+                                    onClick={() => setIsReviewMode(false)}
+                                    className="w-full bg-slate-100 text-slate-600 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all mt-4"
+                                >
+                                    Back to Summary
+                                </button>
+                            </div>
+                        ) : showResults && quizScore !== null ? (
                             <div className="text-center space-y-6">
                                 <div className="w-24 h-24 bg-sky-50 rounded-full flex items-center justify-center mx-auto text-5xl">
-                                    {quizScore >= 9 ? '👑' : quizScore >= 7 ? '⭐' : '📖'}
+                                    {quizScore >= (quizQuestions?.length || 10) * 0.9 ? '👑' : quizScore >= (quizQuestions?.length || 10) * 0.7 ? '⭐' : '📖'}
                                 </div>
                                 <div>
                                     <h3 className="text-2xl font-black text-sky-900">Quiz Completed!</h3>
-                                    <p className="text-sky-600 font-bold text-lg mt-1">Score: {quizScore}/10</p>
+                                    <p className="text-sky-600 font-bold text-lg mt-1">Score: {quizScore}/{(quizQuestions?.length || 10)}</p>
                                     <div className="mt-4 px-6 py-3 rounded-2xl bg-gray-50 text-sm font-medium text-gray-600 italic">
-                                        {quizScore === 10 ? "Absolute Mastery! You're ready for the exam." :
-                                            quizScore >= 8 ? "Excellent! Minor revision might help." :
-                                                quizScore >= 5 ? "Good start, but focus on the explanations below." :
+                                        {quizScore === (quizQuestions?.length || 10) ? "Absolute Mastery! You're ready for the exam." :
+                                            quizScore >= (quizQuestions?.length || 10) * 0.8 ? "Excellent! Minor revision might help." :
+                                                quizScore >= (quizQuestions?.length || 10) * 0.5 ? "Good start, but focus on the explanations below." :
                                                     "Needs more focus. Study the core concepts again."}
                                     </div>
                                 </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => setIsReviewMode(true)}
+                                        className="bg-white border-2 border-sky-100 text-sky-600 py-4 rounded-2xl font-bold hover:bg-sky-50 transition-all"
+                                    >
+                                        Review Answers
+                                    </button>
+                                    <button
+                                        onClick={handleRetry}
+                                        className="bg-white border-2 border-sky-100 text-sky-600 py-4 rounded-2xl font-bold hover:bg-sky-50 transition-all"
+                                    >
+                                        Retry Quiz
+                                    </button>
+                                </div>
                                 <button
                                     onClick={handleConfirmToggle}
-                                    className="w-full bg-sky-600 text-white py-5 rounded-3xl font-black text-lg shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all active:scale-95"
+                                    className="w-full bg-sky-600 text-white py-5 rounded-3xl font-black text-lg shadow-xl shadow-sky-200 hover:bg-sky-700 transition-all active:scale-95"
                                 >
                                     Finish & Save Progress
                                 </button>
@@ -113,9 +197,14 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTas
                         ) : quizQuestions ? (
                             <div className="space-y-6">
                                 <div className="flex justify-between items-center mb-2">
-                                    <span className="px-4 py-1.5 bg-sky-100 text-sky-700 text-xs font-black rounded-full uppercase tracking-widest">Question {currentQuestion + 1}/10</span>
+                                    <div className="flex items-center space-x-2">
+                                        <span className="px-4 py-1.5 bg-sky-100 text-sky-700 text-xs font-black rounded-full uppercase tracking-widest">Question {currentQuestion + 1}/{quizQuestions.length}</span>
+                                        <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${timeLeft <= 5 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-amber-100 text-amber-700'}`}>
+                                            ⏱️ {timeLeft}s
+                                        </span>
+                                    </div>
                                     <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
-                                        <div className="h-full bg-sky-600 transition-all duration-500" style={{ width: `${(currentQuestion + 1) * 10}%` }}></div>
+                                        <div className="h-full bg-sky-600 transition-all duration-500" style={{ width: `${((currentQuestion + 1) / quizQuestions.length) * 100}%` }}></div>
                                     </div>
                                 </div>
                                 <p className="text-xl font-black text-slate-800 leading-tight min-h-[5rem]">
@@ -202,7 +291,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, onToggleTas
                                                     if (isTaskDone) {
                                                         onToggleTask(day.id, idx, 0);
                                                     } else {
-                                                        startQuiz(day.id, idx, task);
+                                                        startQuiz(day.id, idx, task, day.type === 'MOCK_TEST');
                                                     }
                                                 }}
                                                 className="flex items-center space-x-3 cursor-pointer flex-1"
