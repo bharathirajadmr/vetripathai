@@ -40,7 +40,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
         return () => clearInterval(timer);
     }, [timeLeft, validationModal, quizQuestions, showResults, isReviewMode]);
 
-    const startQuiz = async (dayId: string, taskIdx: number, taskName: string, isWeekendTest = false, currentDayIdx = -1) => {
+    const startQuiz = async (dayId: string, taskIdx: number, taskName: string, isWeekendTest = false) => {
         setValidationModal({ dayId, taskIdx, taskName });
         setQuizLoading(true);
         setQuizQuestions(null);
@@ -57,9 +57,35 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
 
             if (isWeekendTest) {
                 endpoint = '/api/mock-test';
-                // For Saturday tests, we should ideally pass only topics from this week.
-                // For simplicity, we'll fetch general mock questions if it's a weekend test.
-                body = { completedTopics: [taskName], lang, subject: taskName };
+
+                // Weekend Test Logic
+                const currentDayIdx = schedule.findIndex(d => d.id === dayId);
+                const currentDay = schedule[currentDayIdx];
+                const dayDate = new Date(currentDay.date);
+                const isSunday = dayDate.getDay() === 0;
+
+                let topicsToTest: string[] = [];
+
+                if (isSunday) {
+                    // Sunday: All topics from Day 1 to today
+                    topicsToTest = schedule
+                        .slice(0, currentDayIdx + 1)
+                        .flatMap(d => d.tasks)
+                        .filter(t => t !== 'Weekly Mock Test' && t !== 'Comprehensive Mock Test');
+                } else {
+                    // Saturday (or any other partial week test): Last 6 scheduled days
+                    const startIdx = Math.max(0, currentDayIdx - 6);
+                    topicsToTest = schedule
+                        .slice(startIdx, currentDayIdx)
+                        .flatMap(d => d.tasks)
+                        .filter(t => t !== 'Weekly Mock Test' && t !== 'Comprehensive Mock Test');
+                }
+
+                body = {
+                    completedTopics: Array.from(new Set(topicsToTest)),
+                    lang,
+                    subject: isSunday ? 'Comprehensive' : 'Weekly Review'
+                };
             }
 
             const response = await fetch(`${API_URL}${endpoint}`, {
@@ -79,8 +105,10 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
     };
 
     const handleAnswer = (option: string) => {
-        const newAnswers = [...answers, option];
+        const newAnswers = [...answers];
+        newAnswers[currentQuestion] = option;
         setAnswers(newAnswers);
+
         if (currentQuestion < (quizQuestions?.length || 10) - 1) {
             setCurrentQuestion(currentQuestion + 1);
             setTimeLeft(30);
@@ -92,6 +120,13 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
             });
             setQuizScore(score);
             setShowResults(true);
+        }
+    };
+
+    const handleBack = () => {
+        if (currentQuestion > 0) {
+            setCurrentQuestion(currentQuestion - 1);
+            setTimeLeft(30);
         }
     };
 
@@ -135,22 +170,31 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
                         ) : isReviewMode && quizQuestions ? (
                             <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
                                 <h3 className="text-2xl font-black text-sky-900 border-b pb-4">Review Answers</h3>
-                                {quizQuestions.map((q, idx) => (
-                                    <div key={idx} className="p-4 rounded-2xl bg-gray-50 border border-gray-100 space-y-2">
-                                        <p className="font-bold text-slate-800 text-sm">{idx + 1}. {q.question}</p>
-                                        <div className="flex items-center space-x-2 text-xs">
-                                            <span className={`px-2 py-0.5 rounded font-bold ${answers[idx] === q.correctAnswer ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                Your Answer: {answers[idx] || 'Skipped'}
-                                            </span>
-                                            <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-700 font-bold">
-                                                Correct: {q.correctAnswer}
-                                            </span>
+                                {quizQuestions.map((q, idx) => {
+                                    const userIdx = q.options.findIndex((_: any, i: number) => String.fromCharCode(65 + i) === answers[idx]);
+                                    const correctIdx = q.options.findIndex((_: any, i: number) => String.fromCharCode(65 + i) === q.correctAnswer);
+                                    const userFullAnswer = userIdx !== -1 ? q.options[userIdx] : 'Skipped';
+                                    const correctFullAnswer = q.options[correctIdx];
+
+                                    return (
+                                        <div key={idx} className="p-4 rounded-2xl bg-gray-50 border border-gray-100 space-y-2">
+                                            <p className="font-bold text-slate-800 text-sm">{idx + 1}. {q.question}</p>
+                                            <div className="flex flex-col space-y-2 text-xs">
+                                                <div className={`p-2 rounded-xl border ${answers[idx] === q.correctAnswer ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
+                                                    <span className="font-black uppercase mr-2">Your Answer:</span>
+                                                    [{answers[idx] || '?'}] {userFullAnswer}
+                                                </div>
+                                                <div className="p-2 rounded-xl border bg-sky-50 border-sky-100 text-sky-700">
+                                                    <span className="font-black uppercase mr-2">Correct Answer:</span>
+                                                    [{q.correctAnswer}] {correctFullAnswer}
+                                                </div>
+                                            </div>
+                                            <p className="text-[11px] text-gray-500 leading-relaxed bg-white p-3 rounded-xl border border-gray-100">
+                                                <span className="font-black text-sky-600 mr-1">Explanation:</span> {q.explanation}
+                                            </p>
                                         </div>
-                                        <p className="text-[11px] text-gray-500 leading-relaxed bg-white p-3 rounded-xl border border-gray-100">
-                                            <span className="font-black text-sky-600 mr-1">Explanation:</span> {q.explanation}
-                                        </p>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                                 <button
                                     onClick={() => setIsReviewMode(false)}
                                     className="w-full bg-slate-100 text-slate-600 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all mt-4"
@@ -213,22 +257,35 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
                                 <div className="grid grid-cols-1 gap-3">
                                     {quizQuestions[currentQuestion].options.map((opt: string, i: number) => {
                                         const label = String.fromCharCode(65 + i); // A, B, C, D
+                                        const isSelected = answers[currentQuestion] === label;
                                         return (
                                             <button
                                                 key={i}
                                                 onClick={() => handleAnswer(label)}
-                                                className="group flex items-center p-4 rounded-2xl border-2 border-slate-100 hover:border-sky-500 hover:bg-sky-50 transition-all text-left"
+                                                className={`group flex items-center p-4 rounded-2xl border-2 transition-all text-left ${isSelected
+                                                        ? 'border-sky-600 bg-sky-50 shadow-md transform scale-[1.02]'
+                                                        : 'border-slate-100 hover:border-sky-500 hover:bg-sky-50'
+                                                    }`}
                                             >
-                                                <span className="w-8 h-8 rounded-lg bg-slate-100 group-hover:bg-sky-200 text-slate-500 group-hover:text-sky-700 flex items-center justify-center font-black mr-4 shrink-0 transition-colors">
+                                                <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-black mr-4 shrink-0 transition-colors ${isSelected ? 'bg-sky-600 text-white' : 'bg-slate-100 group-hover:bg-sky-200 text-slate-500 group-hover:text-sky-700'
+                                                    }`}>
                                                     {label}
                                                 </span>
-                                                <span className="font-bold text-slate-700 group-hover:text-sky-900 leading-tight">
+                                                <span className={`font-bold leading-tight ${isSelected ? 'text-sky-900' : 'text-slate-700 group-hover:text-sky-900'}`}>
                                                     {opt}
                                                 </span>
                                             </button>
                                         );
                                     })}
                                 </div>
+                                {currentQuestion > 0 && (
+                                    <button
+                                        onClick={handleBack}
+                                        className="w-full py-3 text-sky-600 font-black text-xs uppercase tracking-widest hover:bg-sky-50 rounded-xl transition-all border border-sky-100 border-dashed"
+                                    >
+                                        ← Previous Question
+                                    </button>
+                                )}
                             </div>
                         ) : (
                             <div className="text-center py-6">

@@ -8,7 +8,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (userData: Partial<User>) => Promise<void>;
-  resetPassword: (email: string, newPassword: string) => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
   upgradeSubscription: (plan?: string) => Promise<void>;
   activateWithCode: (code: string) => Promise<void>;
   logout: (reason?: 'manual' | 'expiry' | 'conflict') => void;
@@ -79,10 +80,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const resetPassword = async (email: string, newPass: string) => {
+  const forgotPassword = async (email: string) => {
     setError(null);
     try {
-      await storage.resetPasswordBackend(email, newPass);
+      await storage.forgotPasswordBackend(email);
+    } catch (e: any) {
+      throw new Error(e.message || "Failed to send reset code");
+    }
+  };
+
+  const resetPassword = async (email: string, code: string, newPass: string) => {
+    setError(null);
+    try {
+      await storage.resetPasswordBackend(email, code, newPass);
       // If resetting for current user (though usually logged out)
       if (currentUser?.email === email) {
         const updatedUser = { ...currentUser, password: newPass };
@@ -146,6 +156,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isAuthenticated: !!currentUser,
       login,
       signup,
+      forgotPassword,
       resetPassword,
       upgradeSubscription,
       activateWithCode,

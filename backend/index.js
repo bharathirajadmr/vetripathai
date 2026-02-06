@@ -6,51 +6,56 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
+const nodemailer = require('nodemailer');
+const mongoose = require('mongoose');
 const QUIZ_BANK_PATH = path.join(__dirname, 'data', 'quiz_bank.json');
 const CA_DB_PATH = path.join(__dirname, 'data', 'current_affairs_db.json');
 const MOCK_BANK_PATH = path.join(__dirname, 'data', 'mock_bank.json');
-const USERS_FILE = path.join(__dirname, 'data', 'users.json');
-
-// Initialize users file if missing
-if (!fs.existsSync(USERS_FILE)) {
-    const adminExpiry = new Date();
-    adminExpiry.setFullYear(adminExpiry.getFullYear() + 10);
-    const initialUsers = [
-        {
-            fullName: 'VetriPathai Admin',
-            email: 'admin@vetripathai.pro',
-            mobile: '9884664436',
-            password: 'admin',
-            subscriptionStatus: 'active',
-            subscriptionExpiry: adminExpiry.toISOString(),
-            deviceId: 'ADMIN_DEVICE',
-            lastLoginTime: new Date().toISOString()
-        }
-    ];
-    if (!fs.existsSync(path.dirname(USERS_FILE))) fs.mkdirSync(path.dirname(USERS_FILE), { recursive: true });
-    fs.writeFileSync(USERS_FILE, JSON.stringify(initialUsers, null, 2));
-}
-
-function getAllUsers() {
-    try {
-        return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-    } catch (e) {
-        return [];
-    }
-}
-
-function saveUser(user) {
-    const users = getAllUsers();
-    const index = users.findIndex(u => u.email === user.email);
-    if (index > -1) {
-        users[index] = { ...users[index], ...user };
-    } else {
-        users.push(user);
-    }
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-}
-
 dotenv.config();
+const USERS_FILE = path.join(__dirname, 'data', 'users.json');
+const STATE_DIR = path.join(__dirname, 'data', 'states');
+
+// MongoDB Connection
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log('Connected to MongoDB Atlas'))
+    .catch(err => console.error('MongoDB connection error:', err));
+
+const userSchema = new mongoose.Schema({
+    fullName: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    mobile: { type: String },
+    password: { type: String, required: true },
+    subscriptionStatus: { type: String, default: 'trial' },
+    subscriptionExpiry: { type: String },
+    deviceId: { type: String },
+    lastLoginTime: { type: String },
+    resetCode: { type: String },
+    resetCodeExpiry: { type: Number },
+    appData: { type: Object, default: null } // Stores syllabus, schedule, xp, etc.
+});
+
+const User = mongoose.model('User', userSchema);
+
+// Data Migration Script (Local JSON -> MongoDB)
+async function migrateData() {
+    if (fs.existsSync(USERS_FILE)) {
+        try {
+            const data = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+            for (const userData of data) {
+                const exists = await User.findOne({ email: userData.email });
+                if (!exists) {
+                    await User.create(userData);
+                    console.log(`Migrated user: ${userData.email}`);
+                }
+            }
+            // Optional: Rename file instead of deleting to be safe
+            fs.renameSync(USERS_FILE, USERS_FILE + '.migrated');
+        } catch (e) {
+            console.error("Migration failed", e);
+        }
+    }
+}
+migrateData();
 
 const app = express();
 app.use(cors());
@@ -59,6 +64,15 @@ app.use(express.json({ limit: '50mb' })); // Allow larger payloads for PDF text
 // For Render, API key will be in environment variables
 const api_key = process.env.GEMINI_API_KEY || process.env.API_KEY;
 const genAI = new GoogleGenerativeAI(api_key);
+
+// Nodemailer Config
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
 
 const GENERIC_TNPSC_QUIZ = [
     { "question": "Who is known as the 'Father of Local Self Government' in India?", "options": ["Lord Mayo", "Lord Ripon", "Lord Curzon", "Lord Dalhousie"], "correctAnswer": "B", "explanation": "Lord Ripon is known as the Father of Local Self Government in India." },
@@ -191,41 +205,98 @@ async function generateAIResponse(modelName, prompt, schema = null, search = fal
 }
 
 // Auth Routes
-app.post('/api/auth/signup', (req, res) => {
-    const userData = req.body;
-    const users = getAllUsers();
-    if (users.find(u => u.email === userData.email)) {
-        return res.status(400).json({ success: false, error: 'Email already registered' });
+app.post('/api/auth/signup', async (req, res) => {
+    try {
+        const userData = req.body;
+        const exists = await User.findOne({ email: userData.email });
+        if (exists) {
+            return res.status(400).json({ success: false, error: 'Email already registered' });
+        }
+        const user = await User.create(userData);
+        res.json({ success: true, user });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
     }
-    saveUser(userData);
-    res.json({ success: true, user: userData });
 });
 
-app.post('/api/auth/login', (req, res) => {
-    const { email, password } = req.body;
-    const user = getAllUsers().find(u => u.email === email);
-    if (!user || user.password !== password) {
-        return res.status(401).json({ success: false, error: 'Invalid email or password' });
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const user = await User.findOne({ email });
+        if (!user || user.password !== password) {
+            return res.status(401).json({ success: false, error: 'Invalid email or password' });
+        }
+        // Update last login
+        user.lastLoginTime = new Date().toISOString();
+        await user.save();
+        res.json({ success: true, user });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
     }
-    // Update last login
-    const updatedUser = { ...user, lastLoginTime: new Date().toISOString() };
-    saveUser(updatedUser);
-    res.json({ success: true, user: updatedUser });
 });
 
-app.post('/api/auth/reset-password', (req, res) => {
-    const { email, newPassword } = req.body;
-    const user = getAllUsers().find(u => u.email === email);
+app.post('/api/auth/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.resetCode = otp;
+    user.resetCodeExpiry = Date.now() + 3600000; // 1 hour
+    await user.save();
+
+    try {
+        await transporter.sendMail({
+            from: `"VetriPathai Support" <${process.env.EMAIL_USER}>`,
+            to: email,
+            subject: "Password Reset Code - VetriPathai Pro",
+            text: `Your password reset code is: ${otp}. This code will expire in 1 hour.`,
+            html: `
+                <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                    <h2 style="color: #0284c7;">VetriPathai Pro</h2>
+                    <p>Hello,</p>
+                    <p>You requested to reset your password. Please use the following 6-digit code to proceed:</p>
+                    <div style="background: #f0f9ff; padding: 20px; border-radius: 10px; text-align: center; font-size: 24px; font-weight: bold; color: #0369a1; letter-spacing: 5px;">
+                        ${otp}
+                    </div>
+                    <p>This code will expire in 1 hour. If you did not request this, please ignore this email.</p>
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+                    <p style="font-size: 12px; color: #999;">This is an automated message, please do not reply.</p>
+                </div>
+            `
+        });
+        res.json({ success: true });
+    } catch (error) {
+        console.error("Email send failed", error);
+        res.status(500).json({ success: false, error: 'Failed to send email link' });
+    }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+    const { email, code, newPassword } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    if (user.resetCode !== code || Date.now() > user.resetCodeExpiry) {
+        return res.status(400).json({ success: false, error: 'Invalid or expired reset code' });
+    }
+
     user.password = newPassword;
-    saveUser(user);
+    user.resetCode = undefined;
+    user.resetCodeExpiry = undefined;
+    await user.save();
     res.json({ success: true });
 });
 
-app.post('/api/auth/update-user', (req, res) => {
-    const userData = req.body;
-    saveUser(userData);
-    res.json({ success: true });
+app.post('/api/auth/update-user', async (req, res) => {
+    try {
+        const userData = req.body;
+        await User.findOneAndUpdate({ email: userData.email }, userData, { upsert: true });
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 // Routes
@@ -551,14 +622,18 @@ app.post('/api/mock-test', async (req, res) => {
         console.log(`[Mock Bank] Cache Miss. Acting as Exam Preparer for: ${subject}`);
 
         // 2. AI Generation
+        const isWeekly = subject === 'Weekly Review';
         const prompt = `Act as an Expert Exam Question Paper Preparer for TNPSC/Competitive Exams.
-        Your task is to generate 20 high-quality MCQs based on these completed topics: ${completedTopics.join(', ')}.
+        Your task is to generate 20 high-quality MCQs.
+        
+        TEST TYPE: ${subject}
+        TARGET TOPICS: ${completedTopics.join(', ')}
         
         GUIDELINES:
-        1. Base the questions on actual Previous Year Question (PYQ) trends.
-        2. Difficulty: Mix of 40% Moderate, 40% High, 20% Very High (Exam level).
-        3. Format: ONE question must be 'Match the following', TWO must be 'Assertion & Reason', and others standard MCQs.
-        4. VARIETY: 80% should be from provided topics, 20% should be GENERAL COMMON TNPSC topics (Aptitude, Ethics, Current Affairs) even if not in the "completed" list.
+        1. ${isWeekly ? 'STRICT FOCUS: 100% of questions MUST come from the TARGET TOPICS provided.' : 'COMPREHENSIVE: 80% should be from TARGET TOPICS, 20% from general common TNPSC subjects.'}
+        2. Base the questions on actual Previous Year Question (PYQ) trends.
+        3. Difficulty: Mix of 40% Moderate, 40% High, 20% Very High (Exam level).
+        4. Format: ONE question must be 'Match the following', TWO must be 'Assertion & Reason', and others standard MCQs.
         5. Questions must be unique and historically/scientifically accurate.
         
         CONTEXT (PYQ Data): ${oldPapers?.substring(0, 8000) || "Follow standard 2024-2025 exam patterns."}
@@ -602,7 +677,6 @@ app.post('/api/parse-schedule', async (req, res) => {
 
 
 // State Persistence
-const STATE_DIR = path.join(__dirname, 'data', 'states');
 const SETTINGS_FILE = path.join(__dirname, 'data', 'settings.json');
 
 if (!fs.existsSync(STATE_DIR)) {
@@ -654,34 +728,49 @@ if (!fs.existsSync(SETTINGS_FILE)) {
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2));
 }
 
-app.get('/api/user/state', (req, res) => {
-    const email = req.query.email;
-    if (!email) return res.status(400).json({ error: 'Email required' });
+app.get('/api/user/state', async (req, res) => {
+    try {
+        const email = req.query.email;
+        if (!email) return res.status(400).json({ error: 'Email required' });
 
-    console.log(`-> GET /api/user/state (User: ${email})`);
-    const filePath = path.join(STATE_DIR, `${Buffer.from(email).toString('base64')}.json`);
-    if (fs.existsSync(filePath)) {
-        const data = fs.readFileSync(filePath, 'utf8');
-        const json = JSON.parse(data);
-        // Handle both old format (pure state) and new format (wrapped object)
-        const state = json.state || json;
-        res.json({ success: true, data: state });
-    } else {
-        res.json({ success: true, data: null });
+        console.log(`-> GET /api/user/state (User: ${email})`);
+        const user = await User.findOne({ email });
+
+        if (user && user.appData) {
+            res.json({ success: true, data: user.appData });
+        } else {
+            // Fallback to legacy file if exists and not yet in mongo
+            const filePath = path.join(STATE_DIR, `${Buffer.from(email).toString('base64')}.json`);
+            if (fs.existsSync(filePath)) {
+                const data = fs.readFileSync(filePath, 'utf8');
+                const json = JSON.parse(data);
+                const state = json.state || json;
+                res.json({ success: true, data: state });
+            } else {
+                res.json({ success: true, data: null });
+            }
+        }
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
     }
 });
 
-app.post('/api/user/state', (req, res) => {
-    const { email, state, user } = req.body;
-    if (!email || !state) return res.status(400).json({ error: 'Email and state required' });
-
-    console.log(`-> POST /api/user/state (User: ${email})`);
-    const filePath = path.join(STATE_DIR, `${Buffer.from(email).toString('base64')}.json`);
-    const dataToSave = user ? { state, user } : state;
+app.post('/api/user/state', async (req, res) => {
     try {
-        fs.writeFileSync(filePath, JSON.stringify(dataToSave), 'utf8');
-        console.log(`   [State Saved] Size: ${Math.round(JSON.stringify(dataToSave).length / 1024)} KB`);
-        res.json({ success: true });
+        const { email, state } = req.body;
+        if (!email || !state) return res.status(400).json({ error: 'Email and state required' });
+
+        console.log(`-> POST /api/user/state (User: ${email})`);
+        const user = await User.findOne({ email });
+
+        if (user) {
+            user.appData = state;
+            await user.save();
+            console.log(`   [State Saved to Mongo] Size: ${Math.round(JSON.stringify(state).length / 1024)} KB`);
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ success: false, error: 'User not found' });
+        }
     } catch (e) {
         console.error(`   [Save Error] ${e.message}`);
         res.status(500).json({ success: false, error: e.message });
@@ -764,54 +853,28 @@ Language: ${lang === 'ta' ? 'Tamil' : 'English'}.`;
     }
 });
 
-app.get('/api/admin/subscribers', (req, res) => {
+app.get('/api/admin/subscribers', async (req, res) => {
     try {
-        const users = getAllUsers();
-        // Also check for legacy users who might have states but aren't in users.json yet
-        const files = fs.readdirSync(STATE_DIR);
-        files.forEach(file => {
-            try {
-                const emailBase64 = file.replace('.json', '');
-                const email = Buffer.from(emailBase64, 'base64').toString('utf8');
-                if (!users.find(u => u.email === email)) {
-                    const data = JSON.parse(fs.readFileSync(path.join(STATE_DIR, file), 'utf8'));
-                    const userObj = data.user || {
-                        fullName: 'Legacy User',
-                        email: email,
-                        subscriptionStatus: 'trial'
-                    };
-                    users.push(userObj);
-                }
-            } catch (err) { }
-        });
+        const users = await User.find({}).sort({ lastLoginTime: -1 });
         res.json({ success: true, data: users });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-app.get('/api/leaderboard', (req, res) => {
+app.get('/api/leaderboard', async (req, res) => {
     try {
-        const files = fs.readdirSync(STATE_DIR);
-        const entries = files.map(file => {
-            try {
-                const data = fs.readFileSync(path.join(STATE_DIR, file), 'utf8');
-                const json = JSON.parse(data);
-                const state = json.state || json;
-                const user = json.user || state.user; // fallback to legacy user if within state
-
-                if (!state || !state.user) return null;
-
-                return {
-                    name: `Candidate #${file.slice(0, 4)}`, // Anonymized
-                    exam: state.user.examName || 'TNPSC',
-                    level: state.level || 1,
-                    xp: state.xp || 0,
-                    streak: state.streak || 0
-                };
-            } catch (e) { return null; }
-        }).filter(e => e)
-            .sort((a, b) => (b.level * 1000 + b.xp) - (a.level * 1000 + a.xp)) // Sort by rank
+        const users = await User.find({ "appData": { $ne: null } });
+        const entries = users.map(u => {
+            const state = u.appData;
+            return {
+                name: u.fullName.split(' ')[0] + ' ' + (u.fullName.split(' ')[1] ? u.fullName.split(' ')[1][0] + '.' : ''),
+                exam: state?.user?.examName || 'TNPSC',
+                level: state?.level || 1,
+                xp: state?.xp || 0,
+                streak: state?.streak || 0
+            };
+        }).sort((a, b) => (b.level * 1000 + b.xp) - (a.level * 1000 + a.xp)) // Sort by rank
             .slice(0, 10); // Top 10
 
         res.json({ success: true, data: entries });

@@ -10,10 +10,10 @@ const AboutPage: React.FC<AboutPageProps> = ({ lang }) => {
     const t = TRANSLATIONS[lang] as any;
 
     const features = [
-        { icon: '🧠', title: t.featureAI, desc: t.featureAIDesc, color: 'bg-sky-50 text-sky-600' },
-        { icon: '🎯', title: t.featureMastery, desc: t.featureMasteryDesc, color: 'bg-emerald-50 text-emerald-600' },
-        { icon: '📰', title: t.featureCA, desc: t.featureCADesc, color: 'bg-amber-50 text-amber-600' },
-        { icon: '👑', title: t.featureGamification, desc: t.featureGamificationDesc, color: 'bg-indigo-50 text-indigo-600' }
+        { image: '/ai-strategy.png', title: t.featureAI, desc: t.featureAIDesc, color: 'bg-sky-50' },
+        { image: '/mastery.png', title: t.featureMastery, desc: t.featureMasteryDesc, color: 'bg-emerald-50' },
+        { image: '/current-affairs.png', title: t.featureCA, desc: t.featureCADesc, color: 'bg-amber-50' },
+        { image: '/ranking.png', title: t.featureGamification, desc: t.featureGamificationDesc, color: 'bg-indigo-50' }
     ];
 
     return (
@@ -30,7 +30,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ lang }) => {
                     {t.aboutDesc}
                 </p>
                 <div className="pt-8">
-                    <div className="w-24 h-24 bg-gradient-to-br from-sky-400 to-indigo-600 rounded-[2rem] mx-auto shadow-2xl shadow-sky-200 flex items-center justify-center text-4xl transform rotate-12">
+                    <div className="w-24 h-24 bg-gradient-to-br from-sky-400 to-indigo-600 rounded-[2rem] mx-auto shadow-2xl shadow-sky-200 flex items-center justify-center text-4xl transform rotate-12 transition-transform hover:rotate-0 duration-500">
                         🚀
                     </div>
                 </div>
@@ -40,11 +40,19 @@ const AboutPage: React.FC<AboutPageProps> = ({ lang }) => {
             <section className="grid md:grid-cols-2 gap-8">
                 {features.map((f, i) => (
                     <div key={i} className="group p-8 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-sky-100/50 transition-all duration-500 hover:-translate-y-2">
-                        <div className={`w-16 h-16 ${f.color} rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-inner group-hover:scale-110 transition-transform`}>
-                            {f.icon}
+                        <div className={`w-28 h-28 ${f.color} rounded-3xl flex items-center justify-center mb-8 shadow-inner overflow-hidden group-hover:scale-105 transition-transform`}>
+                            <img
+                                src={f.image}
+                                alt={f.title}
+                                className="w-full h-full object-contain p-2"
+                                onError={(e) => {
+                                    // Fallback to a placeholder or icon if image not found
+                                    (e.target as any).src = 'https://placehold.co/200x200/f8fafc/cbd5e1?text=Loading...';
+                                }}
+                            />
                         </div>
                         <h3 className="text-xl font-black text-slate-900 mb-3">{f.title}</h3>
-                        <p className="text-slate-500 font-medium leading-relaxed">
+                        <p className="text-slate-500 font-medium leading-relaxed text-sm">
                             {f.desc}
                         </p>
                     </div>

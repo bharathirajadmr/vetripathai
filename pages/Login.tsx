@@ -9,8 +9,9 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [lang, setLang] = useState<Language>('en');
-  const { login, resetPassword, logoutReason, isAuthenticated } = useAuth();
+  const { login, forgotPassword, resetPassword, logoutReason, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const [otp, setOtp] = useState('');
 
   React.useEffect(() => {
     if (isAuthenticated) {
@@ -20,7 +21,7 @@ const Login: React.FC = () => {
 
   const t = TRANSLATIONS[lang];
 
-  const [forgotPassword, setForgotPassword] = useState(false);
+  const [isForgotPasswordMode, setIsForgotPasswordMode] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -29,18 +30,18 @@ const Login: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    if (forgotPassword) {
+    if (isForgotPasswordMode) {
       setLoading(true);
       try {
         if (!resetSent) {
-          // Step 1: Simulate email sent
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await forgotPassword(email);
           setResetSent(true);
         } else {
-          // Step 2: Actual reset
-          await resetPassword(email, newPassword);
+          await resetPassword(email, otp, newPassword);
           setResetSent(false);
-          setForgotPassword(false);
+          setIsForgotPasswordMode(false);
+          setOtp('');
+          setNewPassword('');
           setError(lang === 'en' ? '✅ Password updated! Please login.' : '✅ கடவுச்சொல் புதுப்பிக்கப்பட்டது! உள்நுழையவும்.');
         }
       } catch (err: any) {
@@ -79,9 +80,9 @@ const Login: React.FC = () => {
           </select>
         </div>
 
-        <h2 className="text-xl font-bold text-gray-800 mb-2">{forgotPassword ? (lang === 'en' ? 'Reset Password' : 'கடவுச்சொல்லை மீட்டமை') : t.login}</h2>
+        <h2 className="text-xl font-bold text-gray-800 mb-2">{isForgotPasswordMode ? (lang === 'en' ? 'Reset Password' : 'கடவுச்சொல்லை மீட்டமை') : t.login}</h2>
         <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-          {forgotPassword
+          {isForgotPasswordMode
             ? (resetSent ? t.resetEmailSent : (lang === 'en' ? 'Enter your email to receive a reset link.' : 'மீட்டமைப்பு இணைப்பைப் பெற உங்கள் மின்னஞ்சலை உள்ளிடவும்.'))
             : (lang === 'en' ? 'Welcome back, future officer.' : 'மீண்டும் வருக, வருங்கால அதிகாரியே.')}
         </p>
@@ -92,7 +93,7 @@ const Login: React.FC = () => {
           </div>
         )}
 
-        {logoutReason && !error && !forgotPassword && (
+        {logoutReason && !error && !isForgotPasswordMode && (
           <div className="mb-4 p-3 bg-orange-50 border border-orange-100 text-orange-600 text-xs font-bold rounded-xl">
             {logoutReason === 'expiry' ? t.sessionExpired : t.deviceConflict}
           </div>
@@ -112,37 +113,53 @@ const Login: React.FC = () => {
             />
           </div>
 
-          {forgotPassword && resetSent && (
-            <div>
-              <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">{t.newPassword}</label>
-              <div className="relative">
+          {isForgotPasswordMode && resetSent && (
+            <>
+              <div>
+                <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">
+                  {lang === 'en' ? 'Reset Code (6 digits)' : 'மீட்டமைப்பு குறியீடு (6 இலக்கங்கள்)'}
+                </label>
                 <input
-                  type={showPassword ? "text" : "password"}
+                  type="text"
                   required
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 transition-all text-sm pr-12"
-                  placeholder="••••••••"
-                  autoFocus
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 transition-all text-sm tracking-[0.5em] font-black text-center"
+                  placeholder="000000"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-sky-600 transition-colors"
-                >
-                  {showPassword ? "👁️" : "👁️‍🗨️"}
-                </button>
               </div>
-            </div>
+              <div>
+                <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">{t.newPassword}</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 transition-all text-sm pr-12"
+                    placeholder="••••••••"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-sky-600 transition-colors"
+                  >
+                    {showPassword ? "👁️" : "👁️‍🗨️"}
+                  </button>
+                </div>
+              </div>
+            </>
           )}
 
-          {!forgotPassword && (
+          {!isForgotPasswordMode && (
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-xs font-black text-gray-400 uppercase tracking-widest">{t.password}</label>
                 <button
                   type="button"
-                  onClick={() => setForgotPassword(true)}
+                  onClick={() => setIsForgotPasswordMode(true)}
                   className="text-[10px] font-bold text-sky-600 hover:underline"
                 >
                   {lang === 'en' ? 'Forgot Password?' : 'கடவுச்சொல் மறந்துவிட்டதா?'}
@@ -173,14 +190,14 @@ const Login: React.FC = () => {
             disabled={loading}
             className="w-full bg-sky-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-sky-200 hover:bg-sky-700 active:scale-[0.98] transition-all mt-4 disabled:opacity-50"
           >
-            {loading ? '...' : (forgotPassword ? (resetSent ? t.confirmReset : (lang === 'en' ? 'Send Reset Link' : 'இணைப்பை அனுப்பு')) : t.login)}
+            {loading ? '...' : (isForgotPasswordMode ? (resetSent ? t.confirmReset : (lang === 'en' ? 'Send Reset Link' : 'இணைப்பை அனுப்பு')) : t.login)}
           </button>
 
-          {forgotPassword && (
+          {isForgotPasswordMode && (
             <button
               type="button"
               onClick={() => {
-                setForgotPassword(false);
+                setIsForgotPasswordMode(false);
                 setResetSent(false);
               }}
               className="w-full text-center text-xs font-bold text-gray-400 hover:text-sky-600 mt-2"

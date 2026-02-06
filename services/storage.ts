@@ -100,6 +100,10 @@ export async function signupBackend(user: User): Promise<User> {
   });
   const data = await res.json();
   if (!data.success) throw new Error(data.error);
+
+  // Clear any stale local data for this email on fresh signup
+  localStorage.removeItem(getStorageKey(data.user.email));
+
   saveUserLocal(data.user);
   return data.user;
 }
@@ -116,11 +120,21 @@ export async function loginBackend(email: string, pass: string): Promise<User> {
   return data.user;
 }
 
-export async function resetPasswordBackend(email: string, newPass: string) {
+export async function forgotPasswordBackend(email: string) {
+  const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error);
+}
+
+export async function resetPasswordBackend(email: string, code: string, newPass: string) {
   const res = await fetch(`${API_URL}/api/auth/reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, newPassword: newPass })
+    body: JSON.stringify({ email, code, newPassword: newPass })
   });
   const data = await res.json();
   if (!data.success) throw new Error(data.error);
