@@ -10,14 +10,16 @@ interface ScheduleViewProps {
     syllabus?: SyllabusItem[];
     onToggleTask: (dayId: string, taskIndex: number, mcqCount: number) => void;
     onMarkHard?: (topic: string) => void;
+    onSaveBookmark?: (bookmark: any) => void;
+    bookmarkedQuestions?: string[];
     hardTopics?: string[];
     onRegenerateSchedule?: () => void;
     loading?: boolean;
 }
 
-const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = [], onToggleTask, onMarkHard, hardTopics = [], onRegenerateSchedule, loading }) => {
+const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = [], onToggleTask, onMarkHard, onSaveBookmark, bookmarkedQuestions = [], hardTopics = [], onRegenerateSchedule, loading }) => {
     const t = TRANSLATIONS[lang];
-    const [validationModal, setValidationModal] = React.useState<{ dayId: string; taskIdx: number; taskName: string } | null>(null);
+    const [validationModal, setValidationModal] = React.useState<{ dayId: string; taskIdx: number; taskName: string; isRetest?: boolean } | null>(null);
     const [quizLoading, setQuizLoading] = React.useState(false);
     const [quizQuestions, setQuizQuestions] = React.useState<any[] | null>(null);
     const [currentQuestion, setCurrentQuestion] = React.useState(0);
@@ -41,13 +43,14 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
     }, [timeLeft, validationModal, quizQuestions, showResults, isReviewMode]);
 
     const startQuiz = async (dayId: string, taskIdx: number, taskName: string, isWeekendTest = false) => {
-        setValidationModal({ dayId, taskIdx, taskName });
+        const isRetest = schedule.find(d => d.id === dayId)?.completedTasks?.includes(taskName);
+        setValidationModal({ dayId, taskIdx, taskName, isRetest });
         setQuizLoading(true);
         setQuizQuestions(null);
         setCurrentQuestion(0);
         setAnswers([]);
         setQuizScore(null);
-        setTimeLeft(30);
+        setTimeLeft(isRetest ? 20 : 30); // Adaptive Timer: 20s for retests, 30s for new
         setIsReviewMode(false);
         setShowResults(false);
 
@@ -111,7 +114,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
 
         if (currentQuestion < (quizQuestions?.length || 10) - 1) {
             setCurrentQuestion(currentQuestion + 1);
-            setTimeLeft(30);
+            setTimeLeft(validationModal?.isRetest ? 20 : 30);
         } else {
             // Calculate Score
             let score = 0;
@@ -120,6 +123,11 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
             });
             setQuizScore(score);
             setShowResults(true);
+
+            // Auto-save progress immediately
+            if (validationModal) {
+                onToggleTask(validationModal.dayId, validationModal.taskIdx, score * 2);
+            }
         }
     };
 
@@ -177,8 +185,23 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
                                     const correctFullAnswer = q.options[correctIdx];
 
                                     return (
-                                        <div key={idx} className="p-4 rounded-2xl bg-gray-50 border border-gray-100 space-y-2">
-                                            <p className="font-bold text-slate-800 text-sm">{idx + 1}. {q.question}</p>
+                                        <div key={idx} className="p-4 rounded-2xl bg-gray-50 border border-gray-100 space-y-2 relative group-item">
+                                            <div className="flex justify-between items-start">
+                                                <p className="font-bold text-slate-800 text-sm pr-10">{idx + 1}. {q.question}</p>
+                                                {onSaveBookmark && (
+                                                    <button
+                                                        onClick={() => onSaveBookmark({
+                                                            topic: validationModal?.taskName,
+                                                            ...q
+                                                        })}
+                                                        disabled={bookmarkedQuestions.includes(q.question)}
+                                                        className={`p-2 rounded-xl transition-all ${bookmarkedQuestions.includes(q.question) ? 'text-amber-500 bg-amber-50' : 'text-gray-400 hover:bg-white hover:text-amber-500'}`}
+                                                        title="Save to Bookmarks"
+                                                    >
+                                                        {bookmarkedQuestions.includes(q.question) ? '★' : '☆'}
+                                                    </button>
+                                                )}
+                                            </div>
                                             <div className="flex flex-col space-y-2 text-xs">
                                                 <div className={`p-2 rounded-xl border ${answers[idx] === q.correctAnswer ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
                                                     <span className="font-black uppercase mr-2">Your Answer:</span>
@@ -232,10 +255,10 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
                                     </button>
                                 </div>
                                 <button
-                                    onClick={handleConfirmToggle}
+                                    onClick={() => setValidationModal(null)}
                                     className="w-full bg-sky-600 text-white py-5 rounded-3xl font-black text-lg shadow-xl shadow-sky-200 hover:bg-sky-700 transition-all active:scale-95"
                                 >
-                                    Finish & Save Progress
+                                    Dismiss & Close
                                 </button>
                             </div>
                         ) : quizQuestions ? (
@@ -263,8 +286,8 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
                                                 key={i}
                                                 onClick={() => handleAnswer(label)}
                                                 className={`group flex items-center p-4 rounded-2xl border-2 transition-all text-left ${isSelected
-                                                        ? 'border-sky-600 bg-sky-50 shadow-md transform scale-[1.02]'
-                                                        : 'border-slate-100 hover:border-sky-500 hover:bg-sky-50'
+                                                    ? 'border-sky-600 bg-sky-50 shadow-md transform scale-[1.02]'
+                                                    : 'border-slate-100 hover:border-sky-500 hover:bg-sky-50'
                                                     }`}
                                             >
                                                 <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-black mr-4 shrink-0 transition-colors ${isSelected ? 'bg-sky-600 text-white' : 'bg-slate-100 group-hover:bg-sky-200 text-slate-500 group-hover:text-sky-700'
@@ -337,11 +360,15 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
                                 {day.tasks.map((task, idx) => {
                                     const isTaskDone = day.completedTasks?.includes(task);
                                     const mcqValue = day.mcqsAttempted?.[task] || 0;
-                                    const isHard = hardTopics.includes(task);
+                                    const isHard = (hardTopics || []).includes(task);
+                                    const isLowMastery = isTaskDone && mcqValue > 0 && mcqValue < 18;
                                     return (
                                         <div
                                             key={idx}
-                                            className="flex items-center justify-between p-3 rounded-xl border border-transparent hover:border-gray-100 hover:bg-gray-50/50 transition-all group"
+                                            className={`flex items-center justify-between p-3 rounded-xl border transition-all group ${isLowMastery
+                                                ? 'border-amber-200 bg-amber-50/50'
+                                                : 'border-transparent hover:border-gray-100 hover:bg-gray-50/50'
+                                                }`}
                                         >
                                             <div
                                                 onClick={() => {
@@ -366,13 +393,23 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
                                                 </div>
                                             </div>
                                             {isTaskDone && (
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); onMarkHard?.(task); }}
-                                                    className={`p-1.5 rounded-lg transition-all ${isHard ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'text-gray-300 dark:text-gray-600 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-amber-500'}`}
-                                                    title={lang === 'en' ? 'Mark as Difficult' : 'கடினமானது என குறிக்கவும்'}
-                                                >
-                                                    {isHard ? '⭐' : '☆'}
-                                                </button>
+                                                <div className="flex items-center space-x-1">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); startQuiz(day.id, idx, task, day.type === 'MOCK_TEST'); }}
+                                                        className="p-1.5 rounded-lg text-sky-600 hover:bg-sky-50 transition-all flex items-center space-x-1"
+                                                        title={lang === 'en' ? 'Retest' : 'மீண்டும் தேர்வு'}
+                                                    >
+                                                        <span className="text-xs font-black uppercase tracking-tighter">Retest</span>
+                                                        <span>🔄</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); onMarkHard?.(task); }}
+                                                        className={`p-1.5 rounded-lg transition-all ${isHard ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'text-gray-300 dark:text-gray-600 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-amber-500'}`}
+                                                        title={lang === 'en' ? 'Mark as Difficult' : 'கடினமானது என குறிக்கவும்'}
+                                                    >
+                                                        {isHard ? '⭐' : '☆'}
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     );
@@ -383,7 +420,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ lang, schedule, syllabus = 
                 ))}
             </div>
 
-            {onRegenerateSchedule && (
+            {onRegenerateSchedule && schedule.length >= 30 && (
                 <div className="bg-gradient-to-br from-sky-50 to-blue-50 p-8 rounded-3xl border border-sky-100 shadow-sm">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                         <div>

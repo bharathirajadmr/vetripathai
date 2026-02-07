@@ -17,7 +17,8 @@ const HistoryView: React.FC<HistoryViewProps> = ({ lang, state }) => {
             day.completedTasks!.map(task => ({
                 task,
                 date: day.date,
-                isHard: state.hardTopics?.includes(task)
+                isHard: state.hardTopics?.includes(task),
+                score: day.mcqsAttempted?.[task]
             }))
         )
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -114,7 +115,14 @@ const HistoryView: React.FC<HistoryViewProps> = ({ lang, state }) => {
                                             <span className="text-amber-500 text-xs">⭐</span>
                                         )}
                                     </div>
-                                    <p className="text-sm font-bold text-gray-900 dark:text-white">{log.task}</p>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <p className="text-sm font-bold text-gray-900 dark:text-white">{log.task}</p>
+                                        {log.score !== undefined && (
+                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${log.score >= 18 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                {log.score / 2}/10
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         ))
@@ -125,6 +133,41 @@ const HistoryView: React.FC<HistoryViewProps> = ({ lang, state }) => {
                     )}
                 </div>
             </section>
+            {/* Bookmarked Explanations */}
+            {state.bookmarks && state.bookmarks.length > 0 && (
+                <section className="animate-in fade-in slide-in-from-bottom-6 duration-1000">
+                    <div className="flex items-center space-x-3 mb-6">
+                        <span className="text-2xl">🔖</span>
+                        <h3 className="text-xl font-black text-amber-600 dark:text-amber-400 uppercase tracking-tight">
+                            {lang === 'en' ? 'Saved Explanations' : 'சேமிக்கப்பட்ட விளக்கங்கள்'}
+                        </h3>
+                    </div>
+
+                    <div className="grid gap-4">
+                        {state.bookmarks.map((b, idx) => (
+                            <div key={idx} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-amber-100 dark:border-amber-900/30 shadow-sm">
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className="px-3 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[10px] font-black rounded-full uppercase tracking-widest">
+                                        {b.topic}
+                                    </span>
+                                    <span className="text-[10px] text-gray-400 font-bold">
+                                        {new Date(b.savedAt).toLocaleDateString()}
+                                    </span>
+                                </div>
+                                <p className="font-black text-gray-900 dark:text-white mb-4 leading-tight">
+                                    {b.question}
+                                </p>
+                                <div className="p-4 bg-sky-50 dark:bg-sky-900/20 rounded-2xl border border-sky-100 dark:border-sky-800">
+                                    <p className="text-xs text-sky-800 dark:text-sky-300 leading-relaxed">
+                                        <span className="font-black mr-2">🎯 Insight:</span>
+                                        {b.explanation}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
         </div>
     );
 };

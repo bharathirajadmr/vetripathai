@@ -113,6 +113,14 @@ export interface AppState {
   motivation?: string;
   mentorInsights?: string[];
   mentorReport?: MentorReport;
+  bookmarks?: {
+    topic: string;
+    question: string;
+    options: string[];
+    correctAnswer: string;
+    explanation: string;
+    savedAt: string;
+  }[];
 }
 
 export interface DashboardStats {

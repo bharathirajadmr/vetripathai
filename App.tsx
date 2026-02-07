@@ -188,15 +188,18 @@ const MainApp: React.FC = () => {
           const completedTasks = day.completedTasks || [];
           const isDone = completedTasks.includes(task);
 
-          const nextCompleted = isDone
-            ? completedTasks.filter(t => t !== task)
-            : [...completedTasks, task];
+          // If mcqCount > 0, we are saving a test result, so ensure it's marked as done.
+          // If mcqCount is 0, it's a manual toggle via checkbox.
+          const nextCompleted = mcqCount > 0
+            ? (isDone ? completedTasks : [...completedTasks, task])
+            : (isDone ? completedTasks.filter(t => t !== task) : [...completedTasks, task]);
 
           const nextMcqs = { ...(day.mcqsAttempted || {}) };
-          if (isDone) {
-            delete nextMcqs[task];
-          } else {
+          if (mcqCount > 0) {
             nextMcqs[task] = mcqCount;
+          } else if (isDone && mcqCount === 0) {
+            // If manually unchecking, we could keep the score (my choice)
+            // or delete it. Keeping it is safer for "oops" clicks.
           }
 
           // ADAPTIVE: If score is low (< 5/10 which is mcqCount < 10), 
@@ -254,6 +257,21 @@ const MainApp: React.FC = () => {
         : [...(prev.hardTopics || []), topic];
 
       const newState = { ...prev, hardTopics: nextHard };
+      saveState(newState, currentUser?.email);
+      return newState;
+    });
+  };
+
+  const handleSaveBookmark = (bookmark: any) => {
+    setState(prev => {
+      const currentBookmarks = prev.bookmarks || [];
+      // Avoid duplicates
+      if (currentBookmarks.some(b => b.question === bookmark.question)) return prev;
+
+      const newState = {
+        ...prev,
+        bookmarks: [...currentBookmarks, { ...bookmark, savedAt: new Date().toISOString() }]
+      };
       saveState(newState, currentUser?.email);
       return newState;
     });
@@ -365,6 +383,8 @@ const MainApp: React.FC = () => {
                 syllabus={state.syllabus || []}
                 onToggleTask={handleToggleTask}
                 onMarkHard={handleMarkHard}
+                onSaveBookmark={handleSaveBookmark}
+                bookmarkedQuestions={(state.bookmarks || []).map(b => b.question)}
                 hardTopics={state.hardTopics}
                 onRegenerateSchedule={handleContinueSchedule}
                 loading={loading}
